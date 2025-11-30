@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () =>
 {
     /*We grab the file input, button, and
      info display area so you can work with them later*/
-  const fileInput = document.getElemenById('fileInput');
+  const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadDatasetBtn');
   const uploadInfo = document.getElementById('upload-info');
 
