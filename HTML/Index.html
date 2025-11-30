@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Steam-like Game Search</title>
+<style>
+:root{
+ --bg:#0f1720; --panel:#12232d; --muted:#98a6b3; --accent:#66c0f4; --card:#152d3a;
+}
+body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:#e6f4ff; }
+
+.header{ height:68px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:linear-gradient(#0b1116,#071016); border-bottom:1px solid rgba(255,255,255,0.03); }
+.brand{ display:flex; align-items:center; gap:12px; }
+.logo{ width:36px; height:36px; border-radius:6px; background:linear-gradient(135deg, #66c0f4, #1b2838); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; }
+.title{ color:var(--accent); font-weight:700; font-size:18px; }
+.nav{ display:flex; gap:10px; align-items:center; }
+.nav button{ background:transparent; border:none; color:var(--muted); padding:8px 10px; cursor:pointer; font-weight:600; }
+.nav button.active{ color:#fff; border-bottom:2px solid var(--accent); padding-bottom:6px; }
+
+.container{ max-width:1180px; margin:18px auto; padding:0 16px; }
+
+.upload-panel{ display:flex; gap:12px; align-items:center; background:var(--panel); padding:12px; border-radius:6px; }
+.small{ color:var(--muted); font-size:13px; }
+.download-btn{ padding:6px 10px; background:var(--accent); border:none; border-radius:4px; cursor:pointer; color:#07141d; font-weight:700; }
+.download-btn:hover{ opacity:0.9; }
+
+.page { display:none; }
+.page.active { display:block; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    <div class="logo" title="logo">S</div>
+    <div><div class="title">Steam Search</div></div>
+  </div>
+  <div class="nav" id="nav">
+    <button class="nav-btn active" data-page="home">Home</button>
+    <button class="nav-btn" data-page="upload">Upload File</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- HOME PAGE -->
+  <div id="page-home" class="page active">
+    <h2>Welcome</h2>
+    <p class="small">Upload CSV/JSON/TXT files on Upload page to generate lexicon, forward index, and inverted index.</p>
+  </div>
+
+  <!-- UPLOAD PAGE -->
+  <div id="page-upload" class="page">
+    <div class="upload-panel">
+      <input id="fileInput" type="file" multiple />
+      <button id="uploadDatasetBtn" class="download-btn">Add Dataset</button>
+      <div id="upload-info" class="small">No file selected</div>
+    </div>
+    <div style="margin-top:12px" class="small">
+      Required columns: appid, name, short_description, header_image, metacritic_score, recommendations_total, is_free
+    </div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button id="downloadLex" class="download-btn">Download Lexicon</button>
+      <button id="downloadForward" class="download-btn">Download Forward Index</button>
+      <button id="downloadInverted" class="download-btn">Download Inverted Index</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modular JS -->
+<script src="../JavaScript/navigation.js"></script>
+<script src="../JavaScript/uploadHandler.js"></script>
+<script src="../JavaScript/downloadHandler.js"></script>
+</body>
+</html>
