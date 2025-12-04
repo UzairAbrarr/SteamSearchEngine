@@ -6,7 +6,7 @@
 <title>Steam-like Game Search</title>
 <style>
 :root{
- --bg:#0f1720; --panel:#12232d; --muted:#98a6b3; --accent:#66c0f4; --card:#152d3a;
+  --bg:#0f1720; --panel:#12232d; --muted:#98a6b3; --accent:#66c0f4; --card:#152d3a;
 }
 body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:#e6f4ff; }
 
@@ -39,6 +39,9 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
   <div class="nav" id="nav">
     <button class="nav-btn active" data-page="home">Home</button>
     <button class="nav-btn" data-page="upload">Upload File</button>
+    <button class="nav-btn" data-page="freegames">Free Games</button>
+    <button class="nav-btn" data-page="search">Search</button>
+    <button class="nav-btn" data-page="about">About</button>
   </div>
 </div>
 
@@ -67,9 +70,13 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
     </div>
   </div>
 
+  <!-- Placeholder pages -->
+  <div id="page-freegames" class="page"><h2>Free Games</h2></div>
+  <div id="page-search" class="page"><h2>Search</h2></div>
+  <div id="page-about" class="page"><h2>About</h2></div>
+
 </div>
 
-<!-- Modular JS -->
 <script src="../JavaScript/navigation.js"></script>
 <script src="../JavaScript/uploadHandler.js"></script>
 <script src="../JavaScript/downloadHandler.js"></script>
