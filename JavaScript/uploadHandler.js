@@ -1,7 +1,7 @@
 // uploadHandler.js
 // Robust barrel (chunked) uploader with duplicate checking and accurate progress.
 // Works with CSV (quoted) and JSON (array of objects).
-
+//Test commit 
 //Runs the whole script only after the webpage fully loads
 document.addEventListener('DOMContentLoaded', () => {
   
