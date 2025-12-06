@@ -1,139 +1,250 @@
-//wait untill the document is fully loaded
-document.addEventListener('DOMContentLoaded', () => 
-{
-    /*We grab the file input, button, and
-     info display area so you can work with them later*/
-  const fileInput = document.getElemenById('fileInput');
+// uploadHandler.js
+// Robust barrel (chunked) uploader with duplicate checking and accurate progress.
+// Works with CSV (quoted) and JSON (array of objects).
+//Test commit 
+//Runs the whole script only after the webpage fully loads
+document.addEventListener('DOMContentLoaded', () => {
+  
+  //Getting references to HTML elements.
+  const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadDatasetBtn');
   const uploadInfo = document.getElementById('upload-info');
 
-  /*We are making it window because we want to access these globally for downloading later.
-    forwardIndex: Stores the final processed documents. Basically: list of all games with their info.
-    invertedIndex: Maps each keyword to the list of game IDs that contain that keyword.
-    lexicon: Just stores words you have seen. A dictionary of all unique terms.*/
-  window.forwardIndex = [];
-  window.invertedIndex = {};
-  window.lexicon = {};
+  // Global structures (kept on window so download handler can access them)
+  window.forwardIndex = window.forwardIndex || [];
+  window.invertedIndex = window.invertedIndex || {}; // barrel -> term -> Set(docId)
+  window.lexicon = window.lexicon || {};
+  const appKeySet = new Set(); // prevents duplicates across uploads (appid or name key)
 
-  /*Some words like “the”, “and”, “a” are useless in search, so we ignore them. A Set is perfect 
-  because checking if a word exists in it is very fast.
-  A Set is like a list but smarter. It doesn’t allow duplicates and 
-  checking if something exists inside it is super fast.*/
-  const STOP_WORDS = new Set(["a","an","the","and","or","but","is","of","in","to","for","with","on","at","by","from","up","down","out","about","into","as","then","now","it","its","are","was","were","be","been","that","this","must","can","will","i","my"]);
+  const STOP_WORDS = new Set([
+    "a","an","the","and","or","but","is","of","in","to","for","with","on","at","by","from",
+    "up","down","out","about","into","as","then","now","it","its","are","was","were","be",
+    "been","that","this","must","can","will","i","my"
+  ]);
 
-    /*Normal .split(",") just cuts everything at commas.
-    But CSV files sometimes have commas inside quotes, like:
-    "Call of Duty, Modern Warfare", Action, Shooter, FPS
-    If we split normally, it breaks the game name in half and ruins the data.
-
-    So this regex is basically saying:
-    Split at commas, but only the commas that are not inside quotes.*/
-  function simpleCSVSplit(line){
+  // safe CSV split that respects quotes (same regex used in your default)
+  function simpleCSVSplit(line) {
     return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
   }
 
-  /*Combine name + shortDescription into one string.
-
-    .toLowerCase() so searches are case-insensitive.
-    .replace(/[^\w\s]/g,' ') removes punctuation (anything not a letter/number/underscore/space), turning punctuation into spaces so splitting is clean.
-    .split(/\s+/) splits on any whitespace into words.
-    .filter(...) removes empty strings and stop words.
-
-    For each remaining word:
-    add it to lexicon (we mark it true so we know it exists).
-    if the word is not yet in invertedIndex, create an empty array for it.
-    push the doc id (doc.appid) into that array.
-    This builds the inverted index: word → list of doc ids.*/
-  function indexDoc(doc){
-    const combined = ((doc.name||'')+' '+(doc.shortDescription||'')).toLowerCase().replace(/[^\w\s]/g,' ');
-    const words = combined.split(/\s+/).filter(w => w && !STOP_WORDS.has(w));
-    for(const w of words){
-      window.lexicon[w]=true;
-      if(!window.invertedIndex[w]) window.invertedIndex[w]=[];
-      window.invertedIndex[w].push(doc.appid||String(window.forwardIndex.length-1));
-    }
+  // remove BOM and trim header fields
+  function parseHeaders(rawHeaderLine) {
+    const line = rawHeaderLine.replace(/^\uFEFF/, '').trim();
+    return simpleCSVSplit(line).map(h => (h || '').toLowerCase().trim().replace(/['"]+/g,''));
   }
 
-  /*If no files were selected, show a message and stop.*/
-  async function processFiles(files){
-    if(!files || files.length===0) return uploadInfo.textContent='No file selected';
+  // ensure invertedIndex[barrel][term] is a Set
+  function ensureInvertedSet(barrel, term) {
+    if (!window.invertedIndex[barrel] || typeof window.invertedIndex[barrel] !== 'object') {
+      window.invertedIndex[barrel] = {};
+    }
+    const cur = window.invertedIndex[barrel][term];
+    if (cur instanceof Set) return cur;
+    if (Array.isArray(cur)) {
+      const s = new Set(cur.map(x => String(x)));
+      window.invertedIndex[barrel][term] = s;
+      return s;
+    }
+    if (cur && typeof cur === 'object') {
+      try {
+        const vals = Object.values(cur).map(v => String(v));
+        const s = new Set(vals);
+        window.invertedIndex[barrel][term] = s;
+        return s;
+      } catch (e) { /* fallthrough */ }
+    }
+    const s = new Set();
+    window.invertedIndex[barrel][term] = s;
+    return s;
+  }
 
-    //Tell user we started.
-    uploadInfo.textContent='Processing...';
+  function barrelForTerm(term) {
+    if (!term || term.length === 0) return '_';
+    const c = term[0];
+    return (c >= 'a' && c <= 'z') ? c : '_';
+  }
 
-    //Reset all indexes before processing new files.
-    window.forwardIndex.length=0;
-    window.invertedIndex={};
-    window.lexicon={};
+  // Index one doc - returns true if added, false if skipped (invalid/duplicate)
+  function indexDocAndAdd(doc) {
+    // validate minimal fields
+    const rawAppid = (doc.appid || '').toString().trim();
+    const name = (doc.name || '').toString().trim();
 
-    //We will count how many rows we processed.
-    let totalCount=0;
+    if (!rawAppid && !name) return false; // skip totally empty
 
-    /*Convert each file into text.
-    If reading fails, skip the file.*/
-    for(let f of Array.from(files)){
-      let text;
-      try{text=await f.text();}catch(e){console.error(e);continue;}
+    // key: prefer appid, fallback to normalized name
+    const key = rawAppid || name.toLowerCase();
+    if (appKeySet.has(key)) return false; // duplicate
 
-      //Split into lines and remove empty lines.
-      const rows=text.split('\n').filter(l=>l.trim());
+    // create docId
+    const docId = window.forwardIndex.length;
+    doc.docId = docId;
 
-      //If file has no data rows, skip.
-      if(rows.length<2) continue;
+    // store forward index
+    window.forwardIndex.push(doc);
+    appKeySet.add(key);
 
-      /*Split the first line (header).
-        Lowercase it so matching column names is easy.*/
-      const headers=simpleCSVSplit(rows[0].toLowerCase());
+    // lexicon + inverted index (split words)
+    const combined = ((name || '') + ' ' + (doc.shortDescription || '')).toLowerCase().replace(/-/g,' ').replace(/[^\w\s]/g,' ');
+    const words = combined.split(/\s+/).filter(w => w && !STOP_WORDS.has(w));
+    for (const w of words) {
+      window.lexicon[w] = true;
+      const barrel = barrelForTerm(w);
+      const s = ensureInvertedSet(barrel, w);
+      s.add(String(docId));
+    }
 
-      /*Find where each column is located in the CSV.
-        Some datasets change order, so we find indexes dynamically.*/
-      const colMap={
-        appid: headers.indexOf('appid'),
-        name: headers.indexOf('name'),
-        short_description: headers.indexOf('short_description'),
-        header_image: headers.indexOf('header_image'),
-        metacritic_score: headers.indexOf('metacritic_score'),
-        recommendations_total: headers.indexOf('recommendations_total'),
-        is_free: headers.indexOf('is_free')
-      };
-      /*Split the row into columns.
-        If row is empty, skip.*/
-      for(let i=1;i<rows.length;i++){
-        const parts=simpleCSVSplit(rows[i]);
-        if(!parts || parts.length===0) continue;
+    return true;
+  }
 
-        /*We extract values from the correct columns.
-        Clean them up. Parse numbers.
-        Convert is_free string to true or false.*/
-        const doc={
-          appid:(parts[colMap.appid]||'').trim(),
-          name:(parts[colMap.name]||'').trim(),
-          shortDescription:(parts[colMap.short_description]||'').trim(),
-          headerImage:(parts[colMap.header_image]||'').trim(),
-          metacriticScore:parseInt(parts[colMap.metacritic_score]||0,10)||0,
-          recommendationsTotal:parseInt(parts[colMap.recommendations_total]||0,10)||0,
-          isFree:((parts[colMap.is_free]||'').trim().toLowerCase()==='true')
+  // Process CSV text in chunked manner and return count added
+  async function processCSVText(text, fileName, chunkSize = 1000) {
+    // normalize line endings and split (support CRLF and LF)
+    const lines = text.split(/\r?\n/);
+    // skip initial empty lines
+    let headerIndex = 0;
+    while (headerIndex < lines.length && lines[headerIndex].trim() === '') headerIndex++;
+    if (headerIndex >= lines.length) return {added: 0, totalRows: 0};
+
+    const headers = parseHeaders(lines[headerIndex]);
+    const required = ["appid","name","short_description","header_image","metacritic_score","recommendations_total","is_free"];
+    const colMap = {};
+    for (const col of required) {
+      const idx = headers.indexOf(col);
+      if (idx === -1) {
+        throw new Error(`Missing required column "${col}" in ${fileName}`);
+      }
+      colMap[col] = idx;
+    }
+
+    let added = 0;
+    const totalRows = lines.length - headerIndex - 1;
+
+    for (let i = headerIndex + 1; i < lines.length; i += chunkSize) {
+      const slice = lines.slice(i, Math.min(i + chunkSize, lines.length));
+      for (const row of slice) {
+        if (!row || row.trim() === '') continue; // ignore blank lines
+        const parts = simpleCSVSplit(row);
+        if (!parts || parts.length === 0) continue;
+
+        const doc = {
+          appid: (parts[colMap.appid] || '').trim().replace(/['"]+/g,''),
+          name: (parts[colMap.name] || '').trim().replace(/['"]+/g,''),
+          shortDescription: (parts[colMap.short_description] || '').trim().replace(/['"]+/g,''),
+          headerImage: (parts[colMap.header_image] || '').trim().replace(/['"]+/g,''),
+          metacriticScore: parseInt((parts[colMap.metacritic_score] || '').trim(), 10) || 0,
+          recommendationsTotal: parseInt((parts[colMap.recommendations_total] || '').trim(), 10) || 0,
+          isFree: ((parts[colMap.is_free] || '').trim().toLowerCase() === 'true')
         };
 
-        //Store the full document in forward index.
-        window.forwardIndex.push(doc);
-
-        //Send doc to our indexing function to update inverted index and lexicon.
-        indexDoc(doc);
-
-        //Count processed rows.
-        totalCount++;
+        if (indexDocAndAdd(doc)) added++;
       }
+
+      // update UI after each chunk
+      uploadInfo.textContent = `Processing ${fileName}: ${Math.min(i + chunkSize - headerIndex, totalRows)}/${totalRows} rows`;
+      // yield to UI so it stays responsive
+      await new Promise(r => setTimeout(r, 5));
     }
-    
-    //Update UI to tell user we are finished.
-    uploadInfo.textContent=`Done! Total ${totalCount} records processed. You can download JSON files now.`;
+
+    return {added, totalRows};
   }
 
-  fileInput.addEventListener('change', (e)=>{
-    const files=e.target.files;
-    uploadInfo.textContent=(files.length===1)?`Selected: ${files[0].name}`:`Selected ${files.length} files`;
+  // Process JSON text in chunks
+  async function processJSONText(text, fileName, chunkSize = 1000) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error(`Invalid JSON in ${fileName}`); }
+    if (!Array.isArray(data)) throw new Error(`Expected array in JSON file ${fileName}`);
+
+    let added = 0;
+    const totalRows = data.length;
+
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const slice = data.slice(i, i + chunkSize);
+      for (const item of slice) {
+        const doc = {
+          appid: (item.appid || item.appId || item.id || '').toString().trim(),
+          name: (item.name || '').toString().trim(),
+          shortDescription: (item.short_description || item.shortDescription || item.description || '').toString().trim(),
+          headerImage: (item.header_image || item.headerImage || '').toString().trim(),
+          metacriticScore: parseInt(item.metacritic_score || item.metacriticScore || 0, 10) || 0,
+          recommendationsTotal: parseInt(item.recommendations_total || item.recommendationsTotal || 0, 10) || 0,
+          isFree: String(item.is_free || item.isFree || '').toLowerCase() === 'true'
+        };
+
+        if (indexDocAndAdd(doc)) added++;
+      }
+
+      uploadInfo.textContent = `Processing ${fileName}: ${Math.min(i + chunkSize, totalRows)}/${totalRows} records`;
+      await new Promise(r => setTimeout(r, 5));
+    }
+
+    return {added, totalRows};
+  }
+
+  // main loop for processing multiple files
+  async function processFiles(files) {
+    if (!files || files.length === 0) {
+      uploadInfo.textContent = 'No file selected';
+      return;
+    }
+
+    // keep existing data if user wants append behavior
+    // if you want to reset on each upload, uncomment next three lines:
+    // window.forwardIndex = [];
+    // window.invertedIndex = {};
+    // window.lexicon = {};
+
+    let totalFiles = files.length;
+    let filesDone = 0;
+    let totalAdded = 0;
+    let totalRowsOverall = 0;
+
+    for (const f of Array.from(files)) {
+      uploadInfo.textContent = `Processing file ${filesDone + 1}/${totalFiles}: ${f.name} ...`;
+      let text;
+      try { text = await f.text(); } catch (e) { console.error('Read error', f.name, e); uploadInfo.textContent = `Failed to read ${f.name}`; filesDone++; continue; }
+
+      // choose format and process with appropriate function
+      const trimmed = text.trim();
+      try {
+        let res;
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          res = await processJSONText(text, f.name);
+        } else {
+          res = await processCSVText(text, f.name);
+        }
+        totalAdded += res.added || 0;
+        totalRowsOverall += res.totalRows || 0;
+      } catch (procErr) {
+        console.error('Processing error', f.name, procErr);
+        uploadInfo.textContent = `Error processing ${f.name}: ${procErr.message}`;
+        // continue to next file
+      }
+
+      filesDone++;
+      uploadInfo.textContent = `Processed ${filesDone}/${totalFiles} files - total added: ${totalAdded}`;
+      await new Promise(r => setTimeout(r, 5));
+    }
+
+    uploadInfo.textContent = `✓ Done! ${filesDone}/${totalFiles} files processed, ${totalAdded} new records added.`;
+    console.log('ForwardIndex:', window.forwardIndex.length, 'Lexicon:', Object.keys(window.lexicon).length, 'Inverted barrels:', Object.keys(window.invertedIndex).length);
+  }
+
+  // UI bindings
+  fileInput.addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) {
+      uploadInfo.textContent = 'No file selected';
+      return;
+    }
+    uploadInfo.textContent = (files.length === 1) ? `Selected: ${files[0].name}` : `Selected ${files.length} files`;
   });
 
-  uploadBtn.addEventListener('click', ()=>processFiles(fileInput.files));
+  uploadBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    processFiles(fileInput.files).catch(err => {
+      console.error('Fatal upload error', err);
+      uploadInfo.textContent = 'Upload failed. See console for details.';
+    });
+  });
 });
