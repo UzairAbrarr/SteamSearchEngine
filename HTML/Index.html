@@ -10,6 +10,7 @@
 }
 body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:#e6f4ff; }
 
+/* header/nav (unchanged visual) */
 .header{ height:68px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:linear-gradient(#0b1116,#071016); border-bottom:1px solid rgba(255,255,255,0.03); }
 .brand{ display:flex; align-items:center; gap:12px; }
 .logo{ width:36px; height:36px; border-radius:6px; background:linear-gradient(135deg, #66c0f4, #1b2838); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; }
@@ -26,15 +27,124 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
 .download-btn:hover{ opacity:0.9; }
 #uploadDatasetBtn { background: var(--green); color:#fff; font-weight:700; }
 
+/* pages */
 .page { display:none; }
 .page.active { display:block; }
 
-.home-category { margin-top:16px; }
-.home-category h3 { margin-bottom:8px; color:var(--accent); }
-.home-games { display:flex; gap:12px; flex-wrap:wrap; }
-.home-game-card { background:var(--card); padding:8px; border-radius:4px; width:150px; text-align:center; cursor:pointer; transition: transform 0.2s; }
-.home-game-card:hover { transform: scale(1.05); }
-.home-game-card img { width:100%; border-radius:4px; }
+/* --- Steam-like category carousel styles --- */
+.home-category { margin-top:18px; }
+.category-head {
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;
+}
+.category-head h3 { margin:0; color:var(--accent); font-weight:700; letter-spacing:0.6px; }
+.category-controls { display:flex; gap:8px; align-items:center; }
+
+.carousel {
+  position:relative;
+  background: linear-gradient(180deg, rgba(0,0,0,0.02), transparent);
+  padding: 8px 0;
+  border-radius:6px;
+}
+
+/* horizontal scrolling area */
+.home-games {
+  display:flex;
+  gap:12px;
+  overflow-x:auto;
+  scroll-behavior:smooth;
+  padding: 10px 12px;
+}
+.home-games::-webkit-scrollbar { height:8px; }
+.home-games::-webkit-scrollbar-thumb { background: rgba(102,192,244,0.25); border-radius:8px; }
+.home-games::-webkit-scrollbar-track { background: transparent; }
+
+/* card */
+.game-card {
+  min-width:320px;   /* banner-ish card */
+  max-width:320px;
+  height:140px;
+  background:var(--card);
+  border-radius:6px;
+  overflow:hidden;
+  flex-shrink:0;
+  display:flex;
+  cursor:pointer;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.55);
+}
+.game-card .thumb {
+  width:220px;
+  height:100%;
+  background-size:cover;
+  background-position:center;
+  flex-shrink:0;
+}
+.game-card .meta {
+  padding:8px 10px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  width:100%;
+}
+.meta h4 { margin:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.meta p { margin:4px 0 0 0; font-size:12px; color:var(--muted); height:36px; overflow:hidden; }
+
+/* price / badge overlays */
+.price-badge {
+  position:relative;
+  display:inline-block;
+  margin-top:6px;
+  font-weight:700;
+  background: rgba(0,0,0,0.35);
+  padding:4px 6px;
+  border-radius:4px;
+  color:#dff3ff;
+  font-size:13px;
+}
+.discount {
+  position:absolute;
+  left:8px;
+  top:8px;
+  background:#1b6a3a;
+  padding:4px 6px;
+  border-radius:4px;
+  font-weight:700;
+  color:#bff5c4;
+  font-size:12px;
+}
+
+/* arrows */
+.cat-arrow {
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:44px;
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(90deg, rgba(0,0,0,0.35), rgba(0,0,0,0.05));
+  color:#fff;
+  border-radius:4px;
+  cursor:pointer;
+  z-index:10;
+  transition:background .12s;
+}
+.cat-arrow:hover { background:linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.08)); }
+.cat-arrow.left { left:8px; }
+.cat-arrow.right { right:8px; }
+
+/* small page dots */
+.carousel-dots { display:flex; gap:6px; justify-content:center; margin-top:8px; }
+.carousel-dots button {
+  width:10px; height:6px; border-radius:4px; background:rgba(255,255,255,0.08); border:none; cursor:pointer;
+}
+.carousel-dots button.active { background:var(--accent); height:8px; width:24px; border-radius:4px; }
+
+/* small responsive tweaks */
+@media(max-width:900px){
+  .game-card { min-width:260px; max-width:260px; height:120px; }
+  .game-card .thumb { width:160px; }
+}
 </style>
 </head>
 <body>
