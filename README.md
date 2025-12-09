@@ -1,59 +1,58 @@
-# Steam Search Engine (DSA Project)
+📌 Overview
+This project is a Steam-inspired game search engine built as part of a Data Structures and Algorithms (DSA) course project.
+The goal is to design an efficient system that allows users to search, filter, and sort games using classic data structures and algorithms instead of brute force chaos.
+It focuses more on logic and performance than fancy UI.
 
-This is our small search engine project based on Steam game data.  
-We kept it simple, clean, and easy to understand. The whole thing runs in the browser, no backend needed.
+🎯 Features
+Add and store game records
 
-We take CSV or JSON files, clean the text, tokenize everything, and then build three structures:
+Search games by:
+Name
+Genre
 
-- Lexicon  
-- Forward Index  
-- Inverted Index  
+Sorting options like:
+Alphabetical order
+Rating-based sorting
+Fast searching using optimized data structures
+Simple and easy-to-understand flow
 
-After indexing, you can download all three as JSON files.
+🧠 Data Structures Used
+Arrays / Lists for storing game data
+Hash Tables for fast lookups
+Trees (if implemented) for ordered searching
+Sorting algorithms for ranking and filtering
+Searching algorithms like Binary Search where applicable
 
----
+⚙️ Technologies Used
+Programming Language: javascript and html
 
-## How It Works
+IDE / Tools: Vs code
 
-The flow is straight:
+No external frameworks required
 
-1. User uploads dataset files  
-2. We clean the text  
-3. Split everything into words  
-4. Remove stopwords  
-5. Build forward index  
-6. Build lexicon  
-7. Build inverted index  
-8. Let the user download all results  
+🚀 How It Works
+Game data is stored in a structured format.
+User provides a search query or filter.
+Relevant algorithms process the data.
+Results are displayed efficiently.
 
-Everything happens inside the browser using JavaScript.
+✅ Learning Outcomes
+Practical implementation of DSA concepts
+Understanding time and space complexity
+Designing real-world inspired search systems
+Working with structured data efficiently
 
----
+📈 Future Improvements
+Advanced filtering options
+Fuzzy search support
+Improved UI
+Database integration
+Recommendation system
 
-## Features
+👤 Contributors
+Uzair
+Amina 
+Arham
 
-- Upload multiple files  
-- Handles CSV and JSON  
-- Clean tokenization  
-- Stopword filtering  
-- Forward index for all documents  
-- Inverted index for fast searching  
-- Lexicon that stores all unique terms  
-- Download everything as JSON  
-- Simple UI inspired by Steam  
-- No server. Pure frontend.
-
----
-
-## Tech Used
-
-- HTML  
-- CSS  
-- JavaScript  
-- FileReader API  
-- Blob API for downloads  
-
----
-
-## Project Structure
-
+📄 License
+This project is for educational purposes only.
