@@ -4,73 +4,188 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Steam-like Game Search</title>
+
 <style>
-:root{
-  --bg:#0f1720; --panel:#12232d; --muted:#98a6b3; --accent:#66c0f4; --card:#152d3a; --green:#00b140;
+:root {
+  --bg:#0f1720;
+  --panel:#12232d;
+  --muted:#98a6b3;
+  --accent:#66c0f4;
+  --card:#152d3a;
+  --green:#00b140;
 }
-body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:#e6f4ff; }
 
-/* header/nav (unchanged visual) */
-.header{ height:68px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:linear-gradient(#0b1116,#071016); border-bottom:1px solid rgba(255,255,255,0.03); }
-.brand{ display:flex; align-items:center; gap:12px; }
-.logo{ width:36px; height:36px; border-radius:6px; background:linear-gradient(135deg, #66c0f4, #1b2838); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; }
-.title{ color:var(--accent); font-weight:700; font-size:18px; }
-.nav{ display:flex; gap:10px; align-items:center; }
-.nav button{ background:transparent; border:none; color:var(--muted); padding:8px 10px; cursor:pointer; font-weight:600; }
-.nav button.active{ color:#fff; border-bottom:2px solid var(--accent); padding-bottom:6px; }
-
-.container{ max-width:1180px; margin:18px auto; padding:0 16px; }
-
-.upload-panel{ display:flex; gap:12px; align-items:center; background:var(--panel); padding:12px; border-radius:6px; }
-.small{ color:var(--muted); font-size:13px; }
-.download-btn{ padding:6px 10px; background:var(--accent); border:none; border-radius:4px; cursor:pointer; color:#07141d; font-weight:700; }
-.download-btn:hover{ opacity:0.9; }
-#uploadDatasetBtn { background: var(--green); color:#fff; font-weight:700; }
-
-/* pages */
-.page { display:none; }
-.page.active { display:block; }
-
-/* --- Steam-like category carousel styles --- */
-.home-category { margin-top:18px; }
-.category-head {
-  display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;
+body {
+  margin:0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: var(--bg);
+  color: #e6f4ff;
 }
-.category-head h3 { margin:0; color:var(--accent); font-weight:700; letter-spacing:0.6px; }
-.category-controls { display:flex; gap:8px; align-items:center; }
 
-.carousel {
-  position:relative;
-  background: linear-gradient(180deg, rgba(0,0,0,0.02), transparent);
-  padding: 8px 0;
+/* header */
+.header {
+  height:68px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 20px;
+  background:linear-gradient(#0b1116, #071016);
+  border-bottom:1px solid rgba(255,255,255,0.03);
+}
+
+.brand {
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.logo {
+  width:36px;
+  height:36px;
+  border-radius:6px;
+  background:linear-gradient(135deg, #66c0f4, #1b2838);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+  color:#fff;
+}
+
+.title {
+  color:var(--accent);
+  font-weight:700;
+  font-size:18px;
+}
+
+.nav {
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+.nav button {
+  background:transparent;
+  border:none;
+  color:var(--muted);
+  padding:8px 10px;
+  cursor:pointer;
+  font-weight:600;
+}
+
+.nav button.active {
+  color:#fff;
+  border-bottom:2px solid var(--accent);
+  padding-bottom:6px;
+}
+
+/* layout */
+.container {
+  max-width:1180px;
+  margin:18px auto;
+  padding:0 16px;
+}
+
+.upload-panel {
+  display:flex;
+  gap:12px;
+  align-items:center;
+  background:var(--panel);
+  padding:12px;
   border-radius:6px;
 }
 
-/* horizontal scrolling area */
+.small {
+  color:var(--muted);
+  font-size:13px;
+}
+
+.download-btn {
+  padding:6px 10px;
+  background:var(--accent);
+  border:none;
+  border-radius:4px;
+  cursor:pointer;
+  color:#07141d;
+  font-weight:700;
+}
+
+.download-btn:hover {
+  opacity:0.9;
+}
+
+#uploadDatasetBtn {
+  background:var(--green);
+  color:#fff;
+  font-weight:700;
+}
+
+.page {
+  display:none;
+}
+
+.page.active {
+  display:block;
+}
+
+/* carousel */
+.home-category {
+  margin-top:18px;
+}
+
+.category-head {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:8px;
+}
+
+.category-head h3 {
+  margin:0;
+  color:var(--accent);
+  font-weight:700;
+  letter-spacing:0.6px;
+}
+
+.carousel {
+  position:relative;
+  padding:8px 0;
+  border-radius:6px;
+}
+
 .home-games {
   display:flex;
   gap:12px;
   overflow-x:auto;
   scroll-behavior:smooth;
-  padding: 10px 12px;
+  padding:10px 12px;
 }
-.home-games::-webkit-scrollbar { height:8px; }
-.home-games::-webkit-scrollbar-thumb { background: rgba(102,192,244,0.25); border-radius:8px; }
-.home-games::-webkit-scrollbar-track { background: transparent; }
 
-/* card */
+.home-games::-webkit-scrollbar {
+  height:8px;
+}
+
+.home-games::-webkit-scrollbar-thumb {
+  background:rgba(102,192,244,0.25);
+  border-radius:8px;
+}
+
+/* game card */
 .game-card {
-  min-width:320px;   /* banner-ish card */
+  min-width:320px;
   max-width:320px;
   height:140px;
   background:var(--card);
   border-radius:6px;
-  overflow:hidden;
+  overflow:visible;
   flex-shrink:0;
   display:flex;
   cursor:pointer;
-  box-shadow: 0 8px 22px rgba(0,0,0,0.55);
+  box-shadow:0 8px 22px rgba(0,0,0,0.55);
+  position:relative;
+  text-decoration:none;
+  color:inherit;
 }
+
 .game-card .thumb {
   width:220px;
   height:100%;
@@ -78,6 +193,7 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
   background-position:center;
   flex-shrink:0;
 }
+
 .game-card .meta {
   padding:8px 10px;
   display:flex;
@@ -85,74 +201,134 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
   justify-content:space-between;
   width:100%;
 }
-.meta h4 { margin:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.meta p { margin:4px 0 0 0; font-size:12px; color:var(--muted); height:36px; overflow:hidden; }
 
-/* price / badge overlays */
-.price-badge {
-  position:relative;
-  display:inline-block;
-  margin-top:6px;
-  font-weight:700;
-  background: rgba(0,0,0,0.35);
-  padding:4px 6px;
-  border-radius:4px;
-  color:#dff3ff;
-  font-size:13px;
+.meta h4 {
+  margin:0;
+  font-size:15px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-.discount {
-  position:absolute;
-  left:8px;
-  top:8px;
-  background:#1b6a3a;
-  padding:4px 6px;
-  border-radius:4px;
-  font-weight:700;
-  color:#bff5c4;
+
+.meta p {
+  margin:4px 0 0 0;
   font-size:12px;
+  color:var(--muted);
+  height:36px;
+  overflow:hidden;
 }
 
-/* arrows */
-.cat-arrow {
+/* hover box */
+.hover-box {
   position:absolute;
-  top:50%;
-  transform:translateY(-50%);
-  width:44px;
-  height:64px;
+  left:calc(100% + 8px);
+  top:8px;
+  width:360px;
+  max-width:calc(100vw - 40px);
+  max-height:260px;
+  background:rgba(7,16,20,0.98);
+  border:1px solid rgba(255,255,255,0.04);
+  box-shadow:0 10px 30px rgba(0,0,0,0.6);
+  padding:12px;
+  border-radius:6px;
+  color:#dff3ff;
+  opacity:0;
+  transform:translateY(8px) scale(0.98);
+  transition:opacity .12s ease, transform .12s ease;
+  z-index:100;
+  pointer-events:none;
+  overflow:auto;
+}
+
+.game-card:hover .hover-box {
+  opacity:1;
+  transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+
+.hover-box h4 {
+  margin:0 0 6px 0;
+  font-size:14px;
+  color:var(--accent);
+}
+
+.hover-box p {
+  margin:0;
+  font-size:13px;
+  color:#d0ecff;
+  line-height:1.35;
+}
+
+/* hide arrows */
+.cat-arrow {
+  display:none !important;
+}
+
+/* dots */
+.carousel-dots {
   display:flex;
-  align-items:center;
+  gap:6px;
   justify-content:center;
-  background:linear-gradient(90deg, rgba(0,0,0,0.35), rgba(0,0,0,0.05));
-  color:#fff;
-  border-radius:4px;
-  cursor:pointer;
-  z-index:10;
-  transition:background .12s;
+  margin-top:8px;
 }
-.cat-arrow:hover { background:linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0.08)); }
-.cat-arrow.left { left:8px; }
-.cat-arrow.right { right:8px; }
 
-/* small page dots */
-.carousel-dots { display:flex; gap:6px; justify-content:center; margin-top:8px; }
 .carousel-dots button {
-  width:10px; height:6px; border-radius:4px; background:rgba(255,255,255,0.08); border:none; cursor:pointer;
+  width:10px;
+  height:6px;
+  border-radius:4px;
+  background:rgba(255,255,255,0.08);
+  border:none;
+  cursor:pointer;
 }
-.carousel-dots button.active { background:var(--accent); height:8px; width:24px; border-radius:4px; }
 
-/* small responsive tweaks */
-@media(max-width:900px){
-  .game-card { min-width:260px; max-width:260px; height:120px; }
-  .game-card .thumb { width:160px; }
+.carousel-dots button.active {
+  background:var(--accent);
+  height:8px;
+  width:24px;
+  border-radius:4px;
+}
+
+/* mobile */
+@media(max-width:900px) {
+  .game-card {
+    min-width:260px;
+    max-width:260px;
+    height:120px;
+  }
+  .game-card .thumb {
+    width:160px;
+  }
+  .hover-box {
+    left:8px;
+    top:calc(100% + 6px);
+    width:calc(100vw - 24px);
+    max-height:220px;
+  }
+}
+
+/* scrollbar */
+::-webkit-scrollbar {
+  height:8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background:var(--accent);
+  border-radius:4px;
+}
+
+::-webkit-scrollbar-track {
+  background:var(--panel);
+  border-radius:4px;
 }
 </style>
 </head>
+
 <body>
 
 <div class="header">
   <div class="brand">
-    <div class="logo" title="logo">S</div>
-    <div><div class="title">Steam Search</div></div>
+    <div class="logo">S</div>
+    <div class="title">Steam Search</div>
   </div>
   <div class="nav" id="nav">
     <button class="nav-btn active" data-page="home">Home</button>
@@ -165,22 +341,22 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
 
 <div class="container">
 
-  <!-- HOME PAGE -->
   <div id="page-home" class="page active">
     <h2>Welcome</h2>
     <div id="home-categories"></div>
   </div>
 
-  <!-- UPLOAD PAGE -->
   <div id="page-upload" class="page">
     <div class="upload-panel">
       <input id="fileInput" type="file" multiple />
       <button id="uploadDatasetBtn" class="download-btn">Upload Dataset</button>
       <div id="upload-info" class="small">No file selected</div>
     </div>
-    <div style="margin-top:12px" class="small">
+
+    <div class="small" style="margin-top:12px">
       Required columns: appid, name, short_description, header_image, metacritic_score, recommendations_total, is_free
     </div>
+
     <div style="margin-top:12px; display:flex; gap:8px;">
       <button id="downloadLex" class="download-btn">Download Lexicon</button>
       <button id="downloadForward" class="download-btn">Download Forward Index</button>
@@ -188,10 +364,20 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
     </div>
   </div>
 
-  <!-- Placeholder pages for other nav buttons -->
-  <div id="page-freegames" class="page"><h2>Free Games</h2></div>
-  <div id="page-search" class="page"><h2>Search</h2></div>
-  <div id="page-about" class="page"><h2>About</h2></div>
+  <div id="page-freegames" class="page">
+    <h2>Free Games</h2>
+  </div>
+
+  <div id="page-search" class="page">
+    <h2>Search</h2>
+  </div>
+
+  <div id="page-about" class="page">
+    <h2>About</h2>
+    <p class="small">
+      This project was created by a team of three students of National University of Science and Technology.
+    </p>
+  </div>
 
 </div>
 
@@ -199,5 +385,6 @@ body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg);
 <script src="../JavaScript/uploadHandler.js"></script>
 <script src="../JavaScript/downloadHandler.js"></script>
 <script src="../JavaScript/homeRenderer.js"></script>
+
 </body>
 </html>
