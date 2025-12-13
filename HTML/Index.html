@@ -1,394 +1,490 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Steam-like Game Search</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Steam-like Game Search</title>
 
-  <style>
-    :root {
-      --bg: #0f1720;
-      --panel: #12232d;
-      --muted: #98a6b3;
-      --accent: #66c0f4;
-      --card: #152d3a;
-      --green: #00b140;
-    }
+<style>
+:root{
+  --bg:#0f1720; --panel:#12232d; --muted:#98a6b3; --accent:#66c0f4; --card:#152d3a; --green:#00b140;
+  --small-card-w:220px;
+  --card-h:200px;
+}
 
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: var(--bg);
-      color: #e6f4ff;
-    }
+/* base */
+*{box-sizing:border-box}
+body{ margin:0; font-family:"Segoe UI", Arial, sans-serif; background:var(--bg); color:#e6f4ff; overflow-x:hidden; scroll-behavior:smooth; transition:background 0.6s ease; }
 
-    /* header */
-    .header {
-      height: 68px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      background: linear-gradient(#0b1116, #071016);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    }
+/* header/nav */
+.header{ height:68px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; background:linear-gradient(#0b1116,#071016); border-bottom:1px solid rgba(255,255,255,0.03); position:sticky; top:0; z-index:200; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.logo{ width:36px; height:36px; border-radius:6px; background:linear-gradient(135deg, #66c0f4, #1b2838); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; }
+.title{ color:var(--accent); font-weight:700; font-size:18px; }
+.nav{ display:flex; gap:10px; align-items:center; }
+.nav button{ background:transparent; border:none; color:var(--muted); padding:8px 10px; cursor:pointer; font-weight:600; transition:color 0.15s; }
+.nav button:hover { color:#fff; }
+.nav button.active{ color:#fff; border-bottom:2px solid var(--accent); padding-bottom:6px; }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+/* container */
+.container{ max-width:1300px; margin:18px auto; padding:0 16px; }
 
-    .logo {
-      width: 36px;
-      height: 36px;
-      border-radius: 6px;
-      background: linear-gradient(135deg, #66c0f4, #1b2838);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      color: #fff;
-    }
+/* upload panel */
+.upload-panel{ display:flex; gap:12px; align-items:center; background:var(--panel); padding:12px; border-radius:6px; }
+.small{ color:var(--muted); font-size:13px; }
+.download-btn{ padding:6px 10px; background:var(--accent); border:none; border-radius:4px; cursor:pointer; color:#07141d; font-weight:700; }
+.download-btn:hover{ opacity:0.9; }
+#uploadDatasetBtn { background: var(--green); color:#fff; font-weight:700; }
 
-    .title {
-      color: var(--accent);
-      font-weight: 700;
-      font-size: 18px;
-    }
+/* page visibility */
+.page { display:none; }
+.page.active { display:block; }
 
-    .nav {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
+/* ========== Reworked category layout ========== */
+/* Each .home-category will be turned into a two-column section:
+   left: tiled grid (2 columns) of small cards, vertical scroll inside the category
+   right: big banner that shows the selected game's cover, title and description
+*/
+.home-category {
+  min-height: 78vh;
+  margin: 36px 0;
+  padding: 22px;
+  border-radius: 10px;
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+  transition: background 0.8s ease, transform 0.2s ease;
+}
 
-    .nav button {
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      padding: 8px 10px;
-      cursor: pointer;
-      font-weight: 600;
-    }
+/* left column */
+.cat-left {
+  width: 48%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 70vh;             /* matches big preview height */
+}
 
-    .nav button.active {
-      color: #fff;
-      border-bottom: 2px solid var(--accent);
-      padding-bottom: 6px;
-    }
+/* header inside category */
+.category-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.category-head h3 { margin:0; color:var(--accent); font-weight:700; font-size:22px; letter-spacing:0.6px; }
 
-    .container {
-      max-width: 1180px;
-      margin: 18px auto;
-      padding: 0 16px;
-    }
+/* convert .home-games to grid: 2 columns, vertical scroll */
+.home-games {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 6px;
+  align-content: start;
+  /* ensure it fills left column below header */
+  flex: 1 1 auto;
+}
 
-    /* upload */
-    .upload-panel {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      background: var(--panel);
-      padding: 12px;
-      border-radius: 6px;
-    }
+/* scroll look */
+.home-games::-webkit-scrollbar { width: 10px; }
+.home-games::-webkit-scrollbar-thumb { background: rgba(102,192,244,0.12); border-radius:8px; }
 
-    .small {
-      color: var(--muted);
-      font-size: 13px;
-    }
+/* small card tile */
+.game-card {
+  width: 100%;
+  height: calc(var(--card-h) * 0.95);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  background: linear-gradient(180deg, rgba(16,26,34,0.85), rgba(11,18,24,0.85));
+  border: 1px solid rgba(255,255,255,0.02);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
 
-    .download-btn {
-      padding: 6px 10px;
-      background: var(--accent);
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      color: #07141d;
-      font-weight: 700;
-    }
+/* only image and name visible on small card */
+.game-card .thumb { position:absolute; inset:0; background-size:cover; background-position:center; }
+.game-card .meta { position:relative; z-index:2; width:100%; padding:10px; background: linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.6)); color:#fff; font-size:14px; text-align:left; }
 
-    .download-btn:hover {
-      opacity: 0.9;
-    }
+/* hover visual (no active change unless clicked) */
+.game-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(0,0,0,0.65); }
 
-    #uploadDatasetBtn {
-      background: var(--green);
-      color: #fff;
-      font-weight: 700;
-    }
+/* active / inactive classes controlled by JS */
+.game-card.active { outline: 2px solid rgba(102,192,244,0.12); transform: scale(1.02); }
+.game-card.inactive { opacity:0.72; transform: scale(0.98); }
 
-    .page {
-      display: none;
-    }
+/* right column - big preview */
+.cat-right {
+  width: 52%;
+  height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  align-items: stretch;
+}
 
-    .page.active {
-      display: block;
-    }
+/* big preview/banner */
+.big-preview {
+  height: 100%;
+  background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.26));
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
 
-    /* home categories */
-    .home-category {
-      margin-top: 18px;
-    }
+/* the banner image area */
+/* note: added box-shadow transition and a :hover rule below for the hover effect */
+.big-preview .banner {
+  height: 68%;
+  border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  cursor: pointer;
+}
 
-    .category-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
+/* hover effect for big banner */
+.big-preview .banner:hover {
+  transform: scale(1.03);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+}
 
-    .category-head h3 {
-      margin: 0;
-      color: var(--accent);
-      font-weight: 700;
-      letter-spacing: 0.6px;
-    }
+/* info under banner */
+.big-preview .info { display:flex; flex-direction:column; gap:8px; }
+.big-preview .title { font-size:26px; font-weight:700; color: #fff; }
+.big-preview .desc { font-size:14.5px; color: #dbeffd; opacity:0.95; line-height:1.45; max-height: 220px; overflow: auto; padding-right:6px; }
 
-    .carousel {
-      position: relative;
-      padding: 8px 0;
-      border-radius: 6px;
-    }
+/* modern search */
+#searchControls { display:flex; gap:10px; align-items:center; margin-bottom:12px; }
+#searchInput {
+  flex:1;
+  padding:12px 16px;
+  border-radius:999px;
+  border:none;
+  background: linear-gradient(180deg, #0f212a, #07121a);
+  color:#eaf6ff;
+  box-shadow: 0 6px 18px rgba(2,10,14,0.6), inset 0 -1px 0 rgba(255,255,255,0.02);
+  font-size:15px;
+  outline:none;
+}
+#searchBtn {
+  padding:10px 16px;
+  border-radius:999px;
+  border:none;
+  background:var(--accent);
+  color:#07141d;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow: 0 8px 20px rgba(6,30,44,0.6);
+}
 
-    .home-games {
-      display: flex;
-      gap: 12px;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      padding: 10px 12px;
-    }
+/* keep free list and others same */
+.free-vertical-list { display:flex; flex-direction:column; gap:14px; padding:12px 4px; }
+.free-game-card { width:100%; background:var(--card); border-radius:6px; display:flex; gap:12px; padding:10px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.45); align-items:flex-start; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.free-game-card:hover { transform: translateY(-2px); box-shadow:0 10px 22px rgba(0,0,0,0.55); }
 
-    .home-games::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    .home-games::-webkit-scrollbar-thumb {
-      background: rgba(102, 192, 244, 0.25);
-      border-radius: 8px;
-    }
-
-    /* game card */
-    .game-card {
-      min-width: 320px;
-      max-width: 320px;
-      height: 140px;
-      background: var(--card);
-      border-radius: 6px;
-      overflow: visible;
-      flex-shrink: 0;
-      display: flex;
-      cursor: pointer;
-      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
-      position: relative;
-      text-decoration: none;
-      color: inherit;
-    }
-
-    .game-card .thumb {
-      width: 220px;
-      height: 100%;
-      background-size: cover;
-      background-position: center;
-      flex-shrink: 0;
-    }
-
-    .game-card .meta {
-      padding: 8px 10px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      width: 100%;
-      overflow: hidden;
-    }
-
-    .meta h4 {
-      margin: 0;
-      font-size: 15px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .meta p {
-      margin: 6px 0 0 0;
-      font-size: 12px;
-      color: var(--muted);
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      line-height: 1.3;
-    }
-
-    /* hover box */
-    .hover-box {
-      position: absolute;
-      left: calc(100% + 8px);
-      top: 8px;
-      width: 360px;
-      max-width: calc(100vw - 40px);
-      max-height: 260px;
-      background: linear-gradient(
-        180deg,
-        rgba(7, 16, 20, 0.98),
-        rgba(7, 16, 20, 0.98)
-      );
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-      padding: 12px;
-      border-radius: 6px;
-      color: #dff3ff;
-      opacity: 0;
-      transform: translateY(8px) scale(0.98);
-      transition: opacity 0.12s ease, transform 0.12s ease;
-      z-index: 100;
-      pointer-events: none;
-      overflow: auto;
-    }
-
-    .game-card:hover .hover-box {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-      pointer-events: auto;
-    }
-
-    .hover-box h4 {
-      margin: 0 0 6px 0;
-      font-size: 14px;
-      color: var(--accent);
-    }
-
-    .hover-box p {
-      margin: 0;
-      font-size: 13px;
-      color: #d0ecff;
-      line-height: 1.35;
-    }
-
-    .cat-arrow {
-      display: none !important;
-    }
-
-    .carousel-dots {
-      display: flex;
-      gap: 6px;
-      justify-content: center;
-      margin-top: 8px;
-    }
-
-    .carousel-dots button {
-      width: 10px;
-      height: 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      border: none;
-      cursor: pointer;
-    }
-
-    .carousel-dots button.active {
-      background: var(--accent);
-      width: 24px;
-      height: 8px;
-    }
-
-    @media (max-width: 900px) {
-      .game-card {
-        min-width: 260px;
-        max-width: 260px;
-        height: 120px;
-      }
-
-      .game-card .thumb {
-        width: 160px;
-      }
-
-      .hover-box {
-        left: 8px;
-        top: calc(100% + 6px);
-        width: calc(100vw - 24px);
-        max-height: 220px;
-      }
-    }
-
-    ::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--accent);
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: var(--panel);
-      border-radius: 4px;
-    }
-  </style>
+/* responsive */
+@media (max-width: 1100px) {
+  .home-category { flex-direction: column; padding:18px; }
+  .cat-left, .cat-right { width:100%; }
+  .cat-right { order:-1; margin-bottom:12px; }
+  :root { --small-card-w: 160px; --card-h:160px; }
+}
+</style>
 </head>
-
 <body>
-  <div class="header">
-    <div class="brand">
-      <div class="logo">S</div>
-      <div class="title">Steam Search</div>
-    </div>
 
-    <div class="nav" id="nav">
-      <button class="nav-btn active" data-page="home">Home</button>
-      <button class="nav-btn" data-page="upload">Upload File</button>
-      <button class="nav-btn" data-page="freegames">Free Games</button>
-      <button class="nav-btn" data-page="search">Search</button>
-      <button class="nav-btn" data-page="about">About</button>
-    </div>
+<div class="header">
+  <div class="brand">
+    <div class="logo" title="logo">S</div>
+    <div><div class="title">Steam Search</div></div>
   </div>
+  <div class="nav" id="nav">
+    <button class="nav-btn active" data-page="home">Home</button>
+    <button class="nav-btn" data-page="upload">Upload File</button>
+    <button class="nav-btn" data-page="freegames">Free Games</button>
+    <button class="nav-btn" data-page="search">Search</button>
+    <button class="nav-btn" data-page="about">About</button>
+  </div>
+</div>
 
-  <div class="container">
+<div class="container">
+
     <div id="page-home" class="page active">
-      <h2>Welcome</h2>
-      <div id="home-categories"></div>
-    </div>
+    <h2 style="margin-top:8px;">Welcome</h2>
+    <div id="home-categories"></div>
+  </div>
 
     <div id="page-upload" class="page">
-      <div class="upload-panel">
-        <input id="fileInput" type="file" multiple />
-        <button id="uploadDatasetBtn" class="download-btn">Upload Dataset</button>
-        <div id="upload-info" class="small">No file selected</div>
-      </div>
-
-      <div class="small" style="margin-top:12px">
-        Required columns: appid, name, short_description, header_image,
-        metacritic_score, recommendations_total, is_free
-      </div>
-
-      <div style="margin-top:12px; display:flex; gap:8px">
-        <button id="downloadLex" class="download-btn">Download Lexicon</button>
-        <button id="downloadForward" class="download-btn">Download Forward Index</button>
-        <button id="downloadInverted" class="download-btn">Download Inverted Index</button>
-      </div>
+    <div class="upload-panel">
+      <input id="fileInput" type="file" multiple />
+      <button id="uploadDatasetBtn" class="download-btn">Upload Dataset</button>
+      <div id="upload-info" class="small">No file selected</div>
     </div>
-
-    <div id="page-freegames" class="page">
-      <h2>Free Games</h2>
+    <div style="margin-top:12px" class="small">
+      Required columns: appid, name, short_description, header_image, metacritic_score, recommendations_total, is_free
     </div>
-
-    <div id="page-search" class="page">
-      <h2>Search</h2>
-    </div>
-
-    <div id="page-about" class="page">
-      <h2>About</h2>
-      <p class="small">
-        This is a DSA project made by a team of three students of National
-        University of Science and Technology.
-      </p>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button id="downloadLex" class="download-btn">Download Lexicon</button>
+      <button id="downloadForward" class="download-btn">Download Forward Index</button>
+      <button id="downloadInverted" class="download-btn">Download Inverted Index</button>
     </div>
   </div>
 
-  <script src="../JavaScript/navigation.js"></script>
-  <script src="../JavaScript/uploadHandler.js"></script>
-  <script src="../JavaScript/downloadHandler.js"></script>
-  <script src="../JavaScript/homeRenderer.js"></script>
+    <div id="page-freegames" class="page">
+    <h2>Free Games</h2>
+    <div id="freeGamesList" class="free-vertical-list"></div>
+  </div>
+
+    <div id="page-search" class="page">
+    <h2>Search</h2>
+    <div id="searchControls">
+      <input type="text" id="searchInput" placeholder="Search games, tags, developers..." />
+      <button id="searchBtn">Search</button>
+    </div>
+    <div id="searchResults"></div>
+    <div id="searchPager"></div>
+  </div>
+
+    <div id="page-about" class="page">
+    <h2>About</h2>
+    <p class="small">This is a DSA project made by a team of three students of National University of Science and Technology.</p>
+  </div>
+
+</div>
+
+<script src="../JavaScript/navigation.js"></script>
+<script src="../JavaScript/uploadHandler.js"></script>
+<script src="../JavaScript/downloadHandler.js"></script>
+<script src="../JavaScript/homeRenderer.js"></script>
+<script src="../JavaScript/searchRenderer.js"></script>
+
+<script>
+/* Glue script that adapts your rendered .home-category sections to the new layout:
+   - NO auto rotation
+   - small cards show only image + name (description hidden)
+   - small list is a 2-column vertical scroll area within the left column
+   - clicking a small card updates big banner + shows description there
+   - clicking the big banner opens the steam store page for that appid (if available)
+*/
+
+(function(){
+  const DEFAULT_PLACEHOLDER = '/mnt/data/e891ed5e-4553-4343-b167-09efd7374316.png';
+
+  function safe(s){ return (s||'').toString().trim(); }
+
+  function getCardImage(card){
+    // try .thumb background
+    const thumb = card.querySelector('.thumb');
+    if (thumb) {
+      const bg = getComputedStyle(thumb).backgroundImage || '';
+      const m = bg.match(/url\((?:'|")?(.*?)(?:'|")?\)/);
+      if (m && m[1]) return m[1];
+      const img = thumb.querySelector('img');
+      if (img && img.src) return img.src;
+    }
+    const imgAny = card.querySelector('img');
+    if (imgAny && imgAny.src) return imgAny.src;
+    if (card.dataset && card.dataset.header) return card.dataset.header;
+    return DEFAULT_PLACEHOLDER;
+  }
+
+  function getCardTitle(card){
+    const h4 = card.querySelector('h4');
+    if (h4 && safe(h4.textContent)) return safe(h4.textContent);
+    if (card.dataset && card.dataset.name) return safe(card.dataset.name);
+    return 'Untitled';
+  }
+
+  function getCardDesc(card){
+    const p = card.querySelector('p');
+    if (p && safe(p.textContent)) return safe(p.textContent);
+    if (card.dataset && card.dataset.desc) return safe(card.dataset.desc);
+    return '';
+  }
+
+  function getCardAppId(card){
+    if (card.dataset && card.dataset.appid) return safe(card.dataset.appid);
+    // try anchor href
+    const a = card.tagName === 'A' ? card : card.querySelector('a[href*="/app/"]');
+    if (a) {
+      const href = a.getAttribute('href') || '';
+      const m = href.match(/\/app\/(\d+)/);
+      if (m) return m[1];
+    }
+    return '';
+  }
+
+  function makeCategoryLayout(cat, idx, gradient){
+    if (cat.dataset.reworked === '1') return;
+
+    const head = cat.querySelector('.category-head');
+    const scroller = cat.querySelector('.home-games');
+    if (!head || !scroller) return;
+
+    // restructure: left column contains head + grid scroller; right column is big preview
+    const left = document.createElement('div'); left.className = 'cat-left';
+    left.appendChild(head);
+
+    // convert scroller into grid (if not already)
+    scroller.classList.remove('horizontal'); // leave harmless
+    scroller.classList.add('home-games'); // ensures our CSS applies
+    // scroller already exists; we expect it contains .game-card elements
+
+    // hide descriptions inside small cards (only image + name visible)
+    Array.from(scroller.querySelectorAll('.game-card')).forEach(card => {
+      const p = card.querySelector('p');
+      if (p) p.style.display = 'none';
+      // ensure name remains: if there's an h4, keep it inside .meta (it will be visible)
+      // sometimes your game-card uses a wrapper anchor; keep structure intact
+    });
+
+    left.appendChild(scroller);
+
+    const right = document.createElement('div'); right.className = 'cat-right';
+    const big = document.createElement('div'); big.className = 'big-preview';
+    const banner = document.createElement('div'); banner.className = 'banner';
+    banner.style.backgroundImage = `url('${DEFAULT_PLACEHOLDER}')`;
+    banner.title = 'Open on Steam';
+    const info = document.createElement('div'); info.className = 'info';
+    const title = document.createElement('div'); title.className = 'title';
+    const desc = document.createElement('div'); desc.className = 'desc';
+    info.appendChild(title);
+    info.appendChild(desc);
+    big.appendChild(banner);
+    big.appendChild(info);
+    right.appendChild(big);
+
+    // replace children of cat with left & right
+    while(cat.firstChild) cat.removeChild(cat.firstChild);
+    cat.appendChild(left);
+    cat.appendChild(right);
+
+    // set background gradient
+    cat.style.background = gradient || 'linear-gradient(90deg,#0f1720,#12232d)';
+    cat.dataset.reworked = '1';
+
+    // wire up cards interaction
+    const cards = Array.from(scroller.querySelectorAll('.game-card'));
+    if (!cards.length) return;
+    let active = 0;
+
+    function setActive(i, smooth=true){
+      if (i < 0 || i >= cards.length) return;
+      active = i;
+      cards.forEach((c, idx) => {
+        c.classList.toggle('active', idx === i);
+        c.classList.toggle('inactive', idx !== i);
+      });
+
+      // update big preview content using data from clicked card
+      const image = getCardImage(cards[i]);
+      const t = getCardTitle(cards[i]);
+      const d = getCardDesc(cards[i]);
+      banner.style.backgroundImage = `url('${image}')`;
+      title.textContent = t;
+      desc.textContent = d;
+
+      // attach appid to banner for opening link
+      const appid = getCardAppId(cards[i]);
+      if (appid) banner.dataset.appid = appid;
+      else delete banner.dataset.appid;
+
+      // scroll the left grid to ensure card is visible (vertical scrolling)
+      if (smooth) {
+        const cardRect = cards[i].getBoundingClientRect();
+        const scRect = scroller.getBoundingClientRect();
+        // compute top offset to center the clicked card vertically
+        const offsetTop = cards[i].offsetTop - Math.max(0, (scroller.clientHeight - cardRect.height) / 2);
+        scroller.scrollTo({ top: offsetTop, behavior: 'smooth' });
+      }
+    }
+
+    // initial set to first card
+    setActive(0, false);
+
+    // clicking a small card sets active
+    cards.forEach((card, idx) => {
+      card.addEventListener('click', (ev) => {
+        // if card is an anchor, prevent default navigation
+        if (card.tagName === 'A' || ev.currentTarget.closest('a')) ev.preventDefault();
+        setActive(idx, true);
+      });
+    });
+
+    // clicking banner opens Steam link if appid present
+    banner.addEventListener('click', () => {
+      const id = banner.dataset.appid;
+      if (id) {
+        const url = `https://store.steampowered.com/app/${encodeURIComponent(id)}`;
+        window.open(url, '_blank', 'noopener');
+      }
+    });
+
+    // create simple dot pager (optional)
+    const dots = document.createElement('div'); dots.className = 'carousel-dots';
+    cards.forEach((_, iCard) => {
+      const b = document.createElement('button');
+      b.addEventListener('click', () => setActive(iCard, true));
+      dots.appendChild(b);
+    });
+    left.appendChild(dots);
+
+    // update dots when active changes - while avoiding heavy mutation observers,
+    // we toggle the active class after each setActive call by updating dots here:
+    const updateDots = () => Array.from(dots.children).forEach((btn, idxBtn) => btn.classList.toggle('active', idxBtn === active));
+    // monkey-patch setActive to call updateDots (wrap)
+    const originalSetActive = setActive;
+    setActive = function(i, smooth) { originalSetActive(i, smooth); updateDots(); };
+    // call once to sync
+    updateDots();
+  }
+
+  function transformAllCategories(){
+    const cats = document.querySelectorAll('.home-category');
+    if(!cats || cats.length === 0) return;
+    const grads = [
+      'linear-gradient(180deg,#071016 0%, #0f1720 100%)',
+      'linear-gradient(180deg,#0b1520 0%, #111827 100%)',
+      'linear-gradient(180deg,#10202b 0%, #0b1320 100%)',
+      'linear-gradient(180deg,#0f1a28 0%, #071016 100%)',
+      'linear-gradient(180deg,#12232d 0%, #0b1116 100%)'
+    ];
+    cats.forEach((cat, idx) => makeCategoryLayout(cat, idx, grads[idx % grads.length]));
+  }
+
+  // run after DOM ready and after datasetUploaded event (homeRenderer uses that)
+  document.addEventListener('DOMContentLoaded', () => setTimeout(transformAllCategories, 180));
+  document.addEventListener('datasetUploaded', () => setTimeout(transformAllCategories, 120));
+
+  // watch for new categories being added later
+  const mo = new MutationObserver(records => {
+    let added = false;
+    for (const r of records) for (const n of r.addedNodes) if (n && n.classList && n.classList.contains && n.classList.contains('home-category')) added = true;
+    if (added) setTimeout(transformAllCategories, 80);
+  });
+  mo.observe(document.body, { childList:true, subtree:true });
+
+  // intersection observer to change body background to category background when visible
+  const sectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const bg = entry.target.style.background || getComputedStyle(entry.target).backgroundImage || '';
+        if (bg) document.body.style.background = bg.includes('gradient') ? bg : `linear-gradient(180deg, ${bg}, ${bg})`;
+      }
+    });
+  }, { threshold: 0.45 });
+
+  function attachSectionObserver(){ document.querySelectorAll('.home-category').forEach(c => sectionObserver.observe(c)); }
+  document.addEventListener('DOMContentLoaded', () => setTimeout(attachSectionObserver, 220));
+  document.addEventListener('datasetUploaded', () => setTimeout(attachSectionObserver, 200));
+})();
+</script>
+
 </body>
 </html>
