@@ -1,194 +1,172 @@
-// homeRenderer.js
-// Renders compact Steam-like home carousels with limited (famous) games per category.
-
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('home-categories');
-  const freePage = document.getElementById('page-freegames');
+  const freeContainer = document.getElementById('freeGamesList');
   const PLACEHOLDER = '/mnt/data/f84e3cff-c908-45f9-8373-2e034c71a892.png';
-  const MAX_HOME_PER_CATEGORY = 12;   // keep home light
-  const FREE_PAGE_SIZE = 20;
+  const MAX_HOME_PER_CATEGORY = 12;
+  const FREE_PAGE_SIZE = 10;
 
-  function escapeHtml(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const categoryDefinitions = [
+    { name: 'Popular', filter: g => Number(g.recommendationsTotal||0)>=5000 },
+    { name: 'Free Games', filter: g => g.isFree },
+    { name: 'Top Metacritic', filter: g => Number(g.metacriticScore||0)>=80 },
+    { name: 'Sports', filter: g => /sports/i.test(g.categoryTags) },
+    { name: 'Vehicle', filter: g => /vehicle|car|bike|cycle|racing/i.test(g.categoryTags) },
+    { name: 'Horror', filter: g => /horror|zombi|zombie|scary|ghost/i.test(g.categoryTags) }
+  ];
+
+  function getField(doc, keys) {
+    for (const k of keys) if (doc[k] !== undefined) return doc[k];
+    return '';
   }
 
-  function makeCard(game) {
-    const hasAppid = game && game.appid && String(game.appid).trim().length > 0;
-    const link = hasAppid ? https://store.steampowered.com/app/${encodeURIComponent(game.appid)} : null;
-    const wrapper = document.createElement(hasAppid ? 'a' : 'div');
-    if (hasAppid) {
-      wrapper.setAttribute('href', link);
-      wrapper.setAttribute('target', '_blank');
-      wrapper.setAttribute('rel', 'noopener noreferrer');
+  function normalizeDoc(raw) {
+    if (!raw) return null;
+    const name = String(getField(raw,['name','title'])||'').trim();
+    const shortDescription = String(getField(raw,['short_description','shortDescription','description'])||'').trim();
+    const combinedText = (name+' '+shortDescription).toLowerCase();
+    return {
+      appid: String(getField(raw,['appid','appId','id'])||'').trim(),
+      name,
+      shortDescription,
+      headerImage: String(getField(raw,['header_image','headerImage','image','header'])||'').trim(),
+      metacriticScore: parseInt(getField(raw,['metacritic_score','metacriticScore'])||0,10)||0,
+      recommendationsTotal: parseInt(getField(raw,['recommendations_total','recommendationsTotal','recs'])||0,10)||0,
+      isFree: (String(getField(raw,['is_free','isFree'])||'').toLowerCase()==='true' || Number(getField(raw,['is_free','isFree'])||0)===1),
+      categoryTags: combinedText
+    };
+  }
+
+  function makeGameCard(g) {
+    const wrapper = document.createElement(g.appid?'a':'div');
+    if(g.appid){
+      wrapper.href = `https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`;
+      wrapper.target = '_blank';
+      wrapper.rel = 'noopener noreferrer';
     }
-    wrapper.className = 'game-card';
-
-    const thumbUrl = (game.headerImage && game.headerImage.trim()) ? escapeHtml(game.headerImage) : PLACEHOLDER;
-    const fullDesc = (game.shortDescription || '').trim() || 'No description available.';
-
+    wrapper.className='game-card';
+    const thumb = g.headerImage || PLACEHOLDER;
+    const name = g.name||'Untitled';
+    const short = g.shortDescription||'No description available.';
     wrapper.innerHTML = `
-      <div class="thumb" style="background-image:url('${thumbUrl}')"></div>
+      <div class="thumb" style="background-image:url('${thumb}')"></div>
       <div class="meta">
-        <div>
-          <h4>${escapeHtml(game.name || 'Untitled')}</h4>
-          <p>${escapeHtml((game.shortDescription || '').substring(0,240))}</p>
-        </div>
-        <div>
-          <span class="price-badge">${game.isFree ? 'Free' : ''}</span>
-        </div>
+        <div><h4>${name}</h4><p>${short}</p></div>
+        <div><span class="price-badge">${g.isFree?'Free':''}</span></div>
       </div>
-      <div class="hover-box" aria-hidden="true">
-        <h4>${escapeHtml(game.name || 'Untitled')}</h4>
-        <p>${escapeHtml(fullDesc)}</p>
-      </div>
+      <div class="hover-box" aria-hidden="true"><h4>${name}</h4><p>${short}</p></div>
     `;
+    wrapper.addEventListener('mouseenter',()=>{ wrapper.querySelector('.hover-box').style.display='block'; });
+    wrapper.addEventListener('mouseleave',()=>{ wrapper.querySelector('.hover-box').style.display='none'; });
     return wrapper;
   }
 
-  function createCarousel(title, games) {
+  let categorizedGames = {};
+
+  function categorizeGames() {
+    const raw = window.forwardIndex || [];
+    const norm = raw.map(normalizeDoc);
+    categorizedGames = {};
+    categoryDefinitions.forEach(def => {
+      categorizedGames[def.name] = norm.filter(def.filter)
+        .sort((a,b)=> (b.recommendationsTotal||0)-(a.recommendationsTotal||0))
+        .slice(0, MAX_HOME_PER_CATEGORY);
+    });
+    categorizedGames.freeGamesFull = norm.filter(g=>g.isFree);
+  }
+
+  // ---------------- Virtualized carousel ----------------
+  function createVirtualCarousel(title, items) {
     const section = document.createElement('div');
-    section.className = 'home-category';
+    section.className='home-category';
+    section.innerHTML = `<div class="category-head"><h3>${title}</h3><div class="category-controls"></div></div>`;
+    const scroller = document.createElement('div'); scroller.className='home-games';
+    section.appendChild(scroller);
 
-    const head = document.createElement('div');
-    head.className = 'category-head';
-    head.innerHTML = <h3>${escapeHtml(title)}</h3><div class="category-controls"></div>;
-    section.appendChild(head);
+    const dots = document.createElement('div'); dots.className='carousel-dots'; section.appendChild(dots);
 
-    const carousel = document.createElement('div');
-    carousel.className = 'carousel';
-    const scroller = document.createElement('div');
-    scroller.className = 'home-games';
+    let cardWidth = 220; // default width + margin buffer
+    const buffer = 2; // number of cards before/after viewport
+    const visibleCards = () => Math.max(1, Math.floor(scroller.clientWidth / cardWidth));
+    const totalPages = () => Math.ceil(items.length / visibleCards());
 
-    for (const g of games) scroller.appendChild(makeCard(g));
+    function renderVisibleCards() {
+      const scrollLeft = scroller.scrollLeft;
+      const firstVisibleIndex = Math.floor(scrollLeft / cardWidth);
+      const start = Math.max(0, firstVisibleIndex - buffer);
+      const end = Math.min(items.length, firstVisibleIndex + visibleCards() + buffer);
 
-    const dots = document.createElement('div');
-    dots.className = 'carousel-dots';
+      scroller.innerHTML=''; // clear only the scroller
+      const frag = document.createDocumentFragment();
+      for(let i=start;i<end;i++){ frag.appendChild(makeGameCard(items[i])); }
+      scroller.appendChild(frag);
+      updateDots();
+    }
 
-    carousel.appendChild(scroller);
-    carousel.appendChild(dots);
-    section.appendChild(carousel);
-
-    // simple dots logic (keeps visual tidy)
-    function updateDots() {
-      dots.innerHTML = '';
-      const cards = scroller.querySelectorAll('.game-card');
-      if (!cards.length) return;
-      const cardWidth = cards[0].offsetWidth + 12;
-      const visible = Math.max(1, Math.floor(scroller.clientWidth / cardWidth));
-      const pages = Math.ceil(cards.length / visible);
-      for (let p = 0; p < pages; p++) {
-        const b = document.createElement('button');
-        b.addEventListener('click', () => {
-          scroller.scrollLeft = p * visible * cardWidth;
-        });
+    function updateDots(){
+      dots.innerHTML='';
+      const visible = visibleCards();
+      const pages = totalPages();
+      for(let p=0;p<pages;p++){
+        const b=document.createElement('button');
+        b.addEventListener('click',()=> scroller.scrollLeft = p*visible*cardWidth);
         dots.appendChild(b);
       }
-      const activePage = Math.round(scroller.scrollLeft / (Math.max(1, visible) * cardWidth));
-      Array.from(dots.children).forEach((btn, i) => btn.classList.toggle('active', i === activePage));
+      const active = Math.round(scroller.scrollLeft/(visible*cardWidth));
+      Array.from(dots.children).forEach((btn,i)=>btn.classList.toggle('active',i===active));
     }
-    setTimeout(updateDots, 80);
-    window.addEventListener('resize', () => setTimeout(updateDots, 60));
-    scroller.addEventListener('scroll', () => setTimeout(updateDots, 30));
 
+    scroller.addEventListener('scroll',()=> requestAnimationFrame(renderVisibleCards));
+    window.addEventListener('resize',()=> requestAnimationFrame(renderVisibleCards));
+
+    renderVisibleCards();
     return section;
   }
+  // -------------------------------------------------------
 
-  function renderAllCategories() {
-    container.innerHTML = '';
-    if (!window.forwardIndex || window.forwardIndex.length === 0) {
-      container.innerHTML = '<p class="small">No games uploaded yet. Upload a dataset to see categories.</p>';
-      return;
-    }
-
-    // Only show the most famous categories on home to keep it light
-    const definitions = [
-      { name: 'Popular', filter: g => Number(g.recommendationsTotal || 0) >= 5000 },
-      { name: 'Top Metacritic', filter: g => Number(g.metacriticScore || 0) >= 80 },
-      { name: 'Free Games', filter: g => Boolean(g.isFree) === true }
-    ];
-
-    for (const def of definitions) {
-      const games = window.forwardIndex.filter(def.filter);
-      if (!games || games.length === 0) continue;
-      // sort by recommendations, then keep the top N
-      const sorted = games.slice().sort((a,b)=> (b.recommendationsTotal||0) - (a.recommendationsTotal||0)).slice(0, MAX_HOME_PER_CATEGORY);
-      const section = createCarousel(def.name.toUpperCase(), sorted);
-      container.appendChild(section);
-    }
-  }
-
-  // Free games page render with pagination
-  function renderFreeGamesPage(page = 1) {
-    if (!freePage) return;
-    const freeList = (window.forwardIndex || []).filter(d => d.isFree);
-    freePage.innerHTML = '<h2>Free Games</h2>';
-    if (!freeList || freeList.length === 0) {
-      freePage.innerHTML += '<p class="small">No free games in dataset.</p>';
-      return;
-    }
-
-    const totalPages = Math.max(1, Math.ceil(freeList.length / FREE_PAGE_SIZE));
-    const current = Math.max(1, Math.min(page, totalPages));
-    const start = (current - 1) * FREE_PAGE_SIZE;
-    const slice = freeList.slice(start, start + FREE_PAGE_SIZE);
-
-    const grid = document.createElement('div');
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(180px, 1fr))';
-    grid.style.gap = '12px';
-    grid.style.marginTop = '12px';
-
-    for (const g of slice) {
-      const node = makeCard(g);
-      if (node.tagName === 'A') { node.style.textDecoration='none'; node.style.color='inherit'; }
-      grid.appendChild(node);
-    }
-
-    freePage.appendChild(grid);
-
-    const pagDiv = document.createElement('div');
-    pagDiv.style.display = 'flex';
-    pagDiv.style.gap = '8px';
-    pagDiv.style.marginTop = '12px';
-    pagDiv.style.flexWrap = 'wrap';
-
-    for (let i = 1; i <= totalPages; i++) {
-      const btn = document.createElement('button');
-      btn.textContent = i;
-      btn.style.padding = '6px 10px';
-      btn.style.borderRadius = '6px';
-      btn.style.background = (i === current) ? 'var(--accent)' : '#0f2a3a';
-      btn.style.color = (i === current) ? '#07141d' : '#dff3ff';
-      btn.onclick = () => renderFreeGamesPage(i);
-      pagDiv.appendChild(btn);
-    }
-
-    freePage.appendChild(pagDiv);
-  }
-
-  // react to dataset upload and page changes
-  document.addEventListener('datasetUploaded', () => {
-    if (typeof window.setActivePage === 'function') window.setActivePage('home');
-    else {
-      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-      document.getElementById('page-home')?.classList.add('active');
-    }
-    renderAllCategories();
-    renderFreeGamesPage(1);
-  });
-
-  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b => {
-    b.addEventListener('click', () => {
-      renderFreeGamesPage(1);
+  function renderHome() {
+    container.innerHTML='';
+    categoryDefinitions.forEach(def => {
+      const games = categorizedGames[def.name] || [];
+      if(!games.length) return;
+      container.appendChild(createVirtualCarousel(def.name.toUpperCase(), games));
     });
+  }
+
+  function renderFreeVertical(page=1, perPage=FREE_PAGE_SIZE) {
+    freeContainer.innerHTML='';
+    const freeGames = categorizedGames.freeGamesFull || [];
+    if(!freeGames.length){ freeContainer.innerHTML='<p class="small">No free games.</p>'; return; }
+    const start = (page-1)*perPage; const end = start+perPage;
+    const frag = document.createDocumentFragment();
+    freeGames.slice(start,end).forEach(g=>{
+      const card = document.createElement('div'); card.className='free-game-card';
+      card.innerHTML = `<img src="${g.headerImage||PLACEHOLDER}" onerror="this.src='${PLACEHOLDER}'" />
+                        <div class="free-info"><h4>${g.name}</h4><p>${g.shortDescription}</p></div>`;
+      card.addEventListener('click',()=> g.appid && window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'));
+      frag.appendChild(card);
+    });
+    freeContainer.appendChild(frag);
+
+    const totalPages = Math.ceil(freeGames.length/perPage);
+    if(totalPages<=1) return;
+    const pager = document.createElement('div'); pager.className='free-pager';
+    const pageWindow=10;
+    let startPage = Math.floor((page-1)/pageWindow)*pageWindow+1;
+    let endPage = Math.min(startPage+pageWindow-1,totalPages);
+
+    if(startPage>1){ const prev = document.createElement('button'); prev.textContent='<'; prev.addEventListener('click',()=>renderFreeVertical(startPage-1,perPage)); pager.appendChild(prev); }
+    for(let i=startPage;i<=endPage;i++){ const btn=document.createElement('button'); btn.textContent=i; btn.classList.toggle('active',i===page); btn.addEventListener('click',()=>renderFreeVertical(i,perPage)); pager.appendChild(btn);}
+    if(endPage<totalPages){ const next = document.createElement('button'); next.textContent='>'; next.addEventListener('click',()=>renderFreeVertical(endPage+1,perPage)); pager.appendChild(next);}
+    freeContainer.appendChild(pager);
+  }
+
+  document.addEventListener('datasetUploaded',()=>{
+    categorizeGames();
+    if(typeof window.setActivePage==='function') window.setActivePage('home');
+    renderHome();
+    renderFreeVertical();
   });
 
-  document.addEventListener('pageChanged', (e) => {
-    if (e?.detail?.page === 'freegames') renderFreeGamesPage(1);
-    if (e?.detail?.page === 'home') renderAllCategories();
-  });
-
-  // initial render
-  renderAllCategories();
-  renderFreeGamesPage(1);
+  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b=>b.addEventListener('click',()=>renderFreeVertical()));
+  if(window.forwardIndex && window.forwardIndex.length){ categorizeGames(); renderHome(); renderFreeVertical(); }
 });
