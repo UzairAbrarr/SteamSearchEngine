@@ -17,8 +17,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function simpleCSVSplit(line){ return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); }
   function parseHeaders(line){ return simpleCSVSplit(line.replace(/^\uFEFF/, '').trim()).map(h => h.toLowerCase().trim().replace(/['"]+/g,'')); }
-  function ensureInvertedSet(barrel, term){ if(!window.invertedIndex[barrel]) window.invertedIndex[barrel]={}; const cur = window.invertedIndex[barrel][term]; if(cur instanceof Set) return cur; if(Array.isArray(cur)){ const s=new Set(cur.map(x=>String(x))); window.invertedIndex[barrel][term]=s; return s; } const s=new Set(); window.invertedIndex[barrel][term]=s; return s; }
-  function barrelForTerm(term){ if(!term || term.length===0) return '_'; const c = term[0]; return (c >= 'a' && c <= 'z') ? c : '_'; }
+  function ensureInvertedSet(barrel, term){ 
+    if(!window.invertedIndex[barrel]) window.invertedIndex[barrel]={}; 
+    const cur = window.invertedIndex[barrel][term]; 
+    if(cur instanceof Set) return cur; 
+    if(Array.isArray(cur)){ 
+      const s = new Set(cur.map(x=>String(x))); 
+      window.invertedIndex[barrel][term] = s; 
+      return s; 
+    } 
+    const s = new Set(); 
+    window.invertedIndex[barrel][term] = s; 
+    return s; 
+  }
+  function barrelForTerm(term){ 
+    if(!term || term.length===0) return '_'; 
+    const c = term[0]; 
+    return (c >= 'a' && c <= 'z') ? c : '_'; 
+  }
 
   function indexDocAndAdd(doc) {
     const rawAppid = (doc.appid || '').toString().trim();
@@ -120,7 +136,12 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const f of Array.from(files)) {
       uploadInfo.textContent = `Processing file ${filesDone + 1}/${totalFiles}: ${f.name} ...`;
       let text;
-      try { text = await f.text(); } catch (e) { console.error('Read error', f.name, e); uploadInfo.textContent = `Failed to read ${f.name}`; filesDone++; continue; }
+      try { text = await f.text(); } catch (e) { 
+        console.error('Read error', f.name, e); 
+        uploadInfo.textContent = `Failed to read ${f.name}`; 
+        filesDone++; 
+        continue; 
+      }
 
       const trimmed = text.trim();
       try {
@@ -148,37 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.dispatchEvent(new Event('datasetUploaded'));
   }
-
-  // --- START: Auto-load predefined indexes from Drive using blob fetch ---
-  async function loadJSONfromDrive(url) {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const text = await blob.text();
-    return JSON.parse(text);
-  }
-
-  async function loadPredefinedIndexes() {
-    const urls = {
-      lexicon: 'https://drive.google.com/uc?export=download&id=18WorxEFHAF_wc1Pd-ea1dO4q-zZX2sr_',
-      forwardIndex: 'https://drive.google.com/uc?export=download&id=1t2ApDLX_6iX7aGxfNYnkc0PEPQKqP59t',
-      invertedIndex: 'https://drive.google.com/uc?export=download&id=1KRjWkeD9FVHpcdpmu9sz4jRNDGwAloW-'
-    };
-
-    try {
-      window.lexicon = await loadJSONfromDrive(urls.lexicon);
-      window.invertedIndex = await loadJSONfromDrive(urls.invertedIndex);
-      const fwdJson = await loadJSONfromDrive(urls.forwardIndex);
-      window.forwardIndex = fwdJson.map((doc, idx) => ({ ...doc, docId: idx }));
-      for (const g of window.forwardIndex) appKeySet.add((g.appid || g.name || '').toString().toLowerCase());
-      document.dispatchEvent(new Event('datasetUploaded'));
-    } catch(e) {
-      console.error('Error loading predefined indexes', e);
-      uploadInfo.textContent = 'Failed to load predefined dataset.';
-    }
-  }
-
-  loadPredefinedIndexes();
-  // --- END: Auto-load predefined indexes ---
 
   fileInput.addEventListener('change', (e) => {
     const files = e.target.files;

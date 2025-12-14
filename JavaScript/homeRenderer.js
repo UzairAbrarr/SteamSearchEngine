@@ -5,6 +5,34 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
+  // --- START: Load default datasets from local PreDefinedJsonsFile ---
+  async function loadDefaultDatasets() {
+    const basePath = '/PreDefinedJsonsFile/'; // folder where all four files are
+    try {
+      const lexRes = await fetch(basePath + 'lexicon.json');
+      window.lexicon = await lexRes.json();
+
+      const invRes = await fetch(basePath + 'invertedIndex.json');
+      window.invertedIndex = await invRes.json();
+
+      const fwd1Res = await fetch(basePath + 'forwardIndex_part1.json');
+      const fwd2Res = await fetch(basePath + 'forwardIndex_part2.json');
+      const fwd1 = await fwd1Res.json();
+      const fwd2 = await fwd2Res.json();
+      window.forwardIndex = [...fwd1, ...fwd2].map((doc, idx) => ({ ...doc, docId: idx }));
+
+      window.appKeySet = new Set(window.forwardIndex.map(g => (g.appid || g.name || '').toString().toLowerCase()));
+
+      document.dispatchEvent(new Event('datasetUploaded'));
+    } catch(e) {
+      console.error('Failed to load default datasets', e);
+      container.innerHTML = '<p class="small">Failed to load default dataset.</p>';
+    }
+  }
+
+  loadDefaultDatasets();
+  // --- END: Load default datasets ---
+
   const definitions = [
     { name: 'Popular', filter: g => Number(g.recommendationsTotal || 0) >= 5000 },
     { name: 'Free Games', filter: g => Boolean(g.isFree) === true },
@@ -162,13 +190,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     freeContainer.appendChild(fragment);
 
-    // sliding pager
     const totalPages = Math.ceil(freeGames.length / perPage);
     if (totalPages <= 1) return;
     const pager = document.createElement('div');
     pager.className = 'free-pager';
 
-    const pageWindow = 10; // show 10 pages max at a time
+    const pageWindow = 10;
     let startPage = Math.floor((page-1)/pageWindow)*pageWindow + 1;
     let endPage = Math.min(startPage + pageWindow - 1, totalPages);
 
