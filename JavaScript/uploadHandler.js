@@ -149,7 +149,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.dispatchEvent(new Event('datasetUploaded'));
   }
 
-  // --- START: Auto-load predefined indexes from Drive ---
+  // --- START: Auto-load predefined indexes from Drive using blob fetch ---
+  async function loadJSONfromDrive(url) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const text = await blob.text();
+    return JSON.parse(text);
+  }
+
   async function loadPredefinedIndexes() {
     const urls = {
       lexicon: 'https://drive.google.com/uc?export=download&id=18WorxEFHAF_wc1Pd-ea1dO4q-zZX2sr_',
@@ -158,25 +165,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-      // load lexicon
-      const lexRes = await fetch(urls.lexicon);
-      const lexJson = await lexRes.json();
-      window.lexicon = lexJson;
-
-      // load inverted index
-      const invRes = await fetch(urls.invertedIndex);
-      const invJson = await invRes.json();
-      window.invertedIndex = invJson;
-
-      // load forward index
-      const fwdRes = await fetch(urls.forwardIndex);
-      const fwdJson = await fwdRes.json();
+      window.lexicon = await loadJSONfromDrive(urls.lexicon);
+      window.invertedIndex = await loadJSONfromDrive(urls.invertedIndex);
+      const fwdJson = await loadJSONfromDrive(urls.forwardIndex);
       window.forwardIndex = fwdJson.map((doc, idx) => ({ ...doc, docId: idx }));
-      
-      // rebuild appKeySet
       for (const g of window.forwardIndex) appKeySet.add((g.appid || g.name || '').toString().toLowerCase());
-
-      // trigger dataset uploaded event so home renders
       document.dispatchEvent(new Event('datasetUploaded'));
     } catch(e) {
       console.error('Error loading predefined indexes', e);
