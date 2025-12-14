@@ -27,12 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // trigger dataset uploaded event
       document.dispatchEvent(new Event('datasetUploaded'));
-    } catch(e) {
+    } catch (e) {
       console.error('Failed to load default datasets', e);
       container.innerHTML = '<p class="small">Failed to load default dataset.</p>';
     }
   }
-
   loadDefaultDatasets();
   // --- END: Load default datasets ---
 
