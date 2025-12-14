@@ -5,9 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
-  // --- Load default datasets from local folder ---
+  // --- START: Load default datasets from local folder ---
   async function loadDefaultDatasets() {
-    const basePath = './PreDefinedJsonsFile/'; // relative to HTML
+    const basePath = './PreDefinedJsonsFile/'; // relative to index.html
     try {
       const lexRes = await fetch(basePath + 'lexicon.json');
       window.lexicon = await lexRes.json();
@@ -21,17 +21,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const fwd2 = await fwd2Res.json();
 
       window.forwardIndex = [...fwd1, ...fwd2].map((doc, idx) => ({ ...doc, docId: idx }));
+
+      // build appKeySet
       window.appKeySet = new Set(window.forwardIndex.map(g => (g.appid || g.name || '').toString().toLowerCase()));
 
-      // trigger rendering
+      // trigger dataset uploaded event
       document.dispatchEvent(new Event('datasetUploaded'));
-    } catch (e) {
+    } catch(e) {
       console.error('Failed to load default datasets', e);
       container.innerHTML = '<p class="small">Failed to load default dataset.</p>';
     }
   }
 
-  // --- Normalization & Helpers ---
+  loadDefaultDatasets();
+  // --- END: Load default datasets ---
+
   const definitions = [
     { name: 'Popular', filter: g => Number(g.recommendationsTotal || 0) >= 5000 },
     { name: 'Free Games', filter: g => Boolean(g.isFree) === true },
@@ -41,8 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: 'Horror', filter: g => /horror|zombi|zombie|scary|ghost/i.test((g.name||'') + ' ' + (g.shortDescription||'')) }
   ];
 
-  function getField(doc, keys) { for (const k of keys) if (doc[k] !== undefined) return doc[k]; return ''; }
-  function normalizeDoc(raw) { 
+  function getField(doc, keys) {
+    for (const k of keys) if (doc[k] !== undefined) return doc[k];
+    return '';
+  }
+
+  function normalizeDoc(raw) {
     if (!raw) return null;
     return {
       appid: String(getField(raw, ['appid','appId','id']) || '').trim(),
@@ -54,7 +62,10 @@ document.addEventListener('DOMContentLoaded', () => {
       isFree: (String(getField(raw, ['is_free','isFree']) || '').toLowerCase() === 'true' || Number(getField(raw, ['is_free','isFree']) || 0) === 1)
     };
   }
-  function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
   function makeGameCard(obj) {
     const g = normalizeDoc(obj);
@@ -85,10 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
     wrapper.addEventListener('mouseenter', () => {
-      const hb = wrapper.querySelector('.hover-box'); if(hb) hb.style.display='block';
+      const hb = wrapper.querySelector('.hover-box');
+      if (hb) hb.style.display = 'block';
     });
     wrapper.addEventListener('mouseleave', () => {
-      const hb = wrapper.querySelector('.hover-box'); if(hb) hb.style.display='none';
+      const hb = wrapper.querySelector('.hover-box');
+      if (hb) hb.style.display = 'none';
     });
     return wrapper;
   }
@@ -102,8 +115,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const fragment = document.createDocumentFragment();
     items.forEach(i => fragment.appendChild(makeGameCard(i)));
     scroller.appendChild(fragment);
-    const dots = document.createElement('div'); dots.className = 'carousel-dots';
-    section.appendChild(scroller); section.appendChild(dots);
+    const dots = document.createElement('div');
+    dots.className = 'carousel-dots';
+    section.appendChild(scroller);
+    section.appendChild(dots);
 
     function updateDots() {
       dots.innerHTML = '';
@@ -118,12 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
         dots.appendChild(b);
       }
       const activePage = Math.round(scroller.scrollLeft / (Math.max(1, visible) * cardWidth));
-      Array.from(dots.children).forEach((btn,i)=>btn.classList.toggle('active', i===activePage));
+      Array.from(dots.children).forEach((btn, i) => btn.classList.toggle('active', i === activePage));
     }
 
     setTimeout(updateDots, 80);
-    window.addEventListener('resize',()=>setTimeout(updateDots,60));
-    scroller.addEventListener('scroll',()=>setTimeout(updateDots,30));
+    window.addEventListener('resize', () => setTimeout(updateDots, 60));
+    scroller.addEventListener('scroll', () => setTimeout(updateDots, 30));
 
     return section;
   }
@@ -136,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const norm = raw.map(normalizeDoc);
+
     definitions.forEach(def => {
       const games = norm.filter(def.filter);
       if (!games.length) return;
@@ -153,37 +169,75 @@ document.addEventListener('DOMContentLoaded', () => {
       freeContainer.innerHTML = '<p class="small">No free games in dataset.</p>';
       return;
     }
-    const start = (page-1)*perPage; const end=start+perPage;
+
+    const start = (page-1)*perPage;
+    const end = start+perPage;
     const fragment = document.createDocumentFragment();
-    freeGames.slice(start,end).forEach(g=>{
-      const card=document.createElement('div'); card.className='free-game-card';
-      const thumb=escapeHtml(g.headerImage||PLACEHOLDER);
-      const name=escapeHtml(g.name||'Untitled'); const desc=escapeHtml(g.shortDescription||'No description available.');
-      card.innerHTML=`<img src="${thumb}" alt="${name}" onerror="this.src='${PLACEHOLDER}'" />
-        <div class="free-info"><h4>${name}</h4><p>${desc}</p></div>`;
-      card.addEventListener('click',()=>{ if(g.appid) window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'); });
+    freeGames.slice(start, end).forEach(g => {
+      const card = document.createElement('div');
+      card.className = 'free-game-card';
+      const thumb = escapeHtml(g.headerImage || PLACEHOLDER);
+      const name = escapeHtml(g.name || 'Untitled');
+      const desc = escapeHtml(g.shortDescription || 'No description available.');
+      card.innerHTML = `
+        <img src="${thumb}" alt="${name}" onerror="this.src='${PLACEHOLDER}'" />
+        <div class="free-info">
+          <h4>${name}</h4>
+          <p>${desc}</p>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        if (g.appid) window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`, '_blank');
+      });
       fragment.appendChild(card);
     });
     freeContainer.appendChild(fragment);
 
-    const totalPages=Math.ceil(freeGames.length/perPage);
-    if(totalPages<=1) return;
-    const pager=document.createElement('div'); pager.className='free-pager';
-    const pageWindow=10;
-    let startPage=Math.floor((page-1)/pageWindow)*pageWindow+1;
-    let endPage=Math.min(startPage+pageWindow-1,totalPages);
-    if(startPage>1){ const prev=document.createElement('button'); prev.textContent='<'; prev.addEventListener('click',()=>renderFreeVertical(startPage-1,perPage)); pager.appendChild(prev); }
-    for(let i=startPage;i<=endPage;i++){ const btn=document.createElement('button'); btn.textContent=i; btn.classList.toggle('active',i===page); btn.addEventListener('click',()=>renderFreeVertical(i,perPage)); pager.appendChild(btn); }
-    if(endPage<totalPages){ const next=document.createElement('button'); next.textContent='>'; next.addEventListener('click',()=>renderFreeVertical(endPage+1,perPage)); pager.appendChild(next); }
+    const totalPages = Math.ceil(freeGames.length / perPage);
+    if (totalPages <= 1) return;
+    const pager = document.createElement('div');
+    pager.className = 'free-pager';
+
+    const pageWindow = 10;
+    let startPage = Math.floor((page-1)/pageWindow)*pageWindow + 1;
+    let endPage = Math.min(startPage + pageWindow - 1, totalPages);
+
+    if (startPage > 1) {
+      const prev = document.createElement('button'); prev.textContent = '<'; 
+      prev.addEventListener('click', () => renderFreeVertical(startPage - 1, perPage));
+      pager.appendChild(prev);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = i;
+      btn.classList.toggle('active', i===page);
+      btn.addEventListener('click', () => renderFreeVertical(i, perPage));
+      pager.appendChild(btn);
+    }
+
+    if (endPage < totalPages) {
+      const next = document.createElement('button'); next.textContent = '>'; 
+      next.addEventListener('click', () => renderFreeVertical(endPage + 1, perPage));
+      pager.appendChild(next);
+    }
+
     freeContainer.appendChild(pager);
   }
 
-  // --- Event binding ---
   document.addEventListener('datasetUploaded', () => {
+    if (typeof window.setActivePage === 'function') window.setActivePage('home');
+    else {
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+      document.getElementById('page-home')?.classList.add('active');
+      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('.nav-btn[data-page="home"]')?.classList.add('active');
+    }
     renderHome();
     renderFreeVertical();
   });
 
-  // --- Trigger initial load ---
-  loadDefaultDatasets();
+  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b => {
+    b.addEventListener('click', () => renderFreeVertical());
+  });
 });
