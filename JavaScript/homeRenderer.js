@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
-  // --- START: Load default datasets from local folder ---
   async function loadDefaultDatasets() {
     const basePath = './PreDefinedJsonsFile/';
     try {
@@ -20,10 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const fwd1 = await fwd1Res.json();
       const fwd2 = await fwd2Res.json();
 
-      // Pre-normalize forwardIndex once
+      // Pre-normalize forwardIndex
       window.forwardIndex = [...fwd1, ...fwd2].map((doc, idx) => normalizeDoc({ ...doc, docId: idx }));
       window.appKeySet = new Set(window.forwardIndex.map(g => (g.appid || g.name || '').toLowerCase()));
-
       document.dispatchEvent(new Event('datasetUploaded'));
     } catch (e) {
       console.error('Failed to load default datasets', e);
@@ -31,7 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   loadDefaultDatasets();
-  // --- END: Load default datasets ---
 
   const definitions = [
     { name: 'Popular', filter: g => g.recommendationsTotal >= 5000 },
@@ -44,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function normalizeDoc(raw) {
     if (!raw) return null;
-    const get = (keys) => keys.find(k => raw[k] !== undefined) || '';
     return {
       docId: raw.docId,
       appid: String(raw.appid || raw.appId || raw.id || '').trim(),
@@ -53,13 +49,23 @@ document.addEventListener('DOMContentLoaded', () => {
       headerImage: String(raw.header_image || raw.headerImage || raw.image || raw.header || '').trim(),
       metacriticScore: parseInt(raw.metacritic_score || raw.metacriticScore || 0, 10) || 0,
       recommendationsTotal: parseInt(raw.recommendations_total || raw.recommendationsTotal || raw.recs || 0, 10) || 0,
-      isFree: (String(raw.is_free || raw.isFree || '').toLowerCase() === 'true' || Number(raw.is_free || raw.isFree || 0) === 1)
+      isFree: String(raw.is_free || raw.isFree || '').toLowerCase() === 'true' || Number(raw.is_free || raw.isFree || 0) === 1
     };
   }
 
   function escapeHtml(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  // event delegation for hover (faster than individual listeners)
+  container.addEventListener('mouseover', e => {
+    const hb = e.target.closest('.game-card')?.querySelector('.hover-box');
+    if (hb) hb.style.display = 'block';
+  });
+  container.addEventListener('mouseout', e => {
+    const hb = e.target.closest('.game-card')?.querySelector('.hover-box');
+    if (hb) hb.style.display = 'none';
+  });
 
   function makeGameCard(g) {
     const wrapper = document.createElement(g.appid ? 'a' : 'div');
@@ -89,11 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     section.innerHTML = `<div class="category-head"><h3>${escapeHtml(title)}</h3></div>`;
     const scroller = document.createElement('div');
     scroller.className = 'home-games';
-    const fragment = document.createDocumentFragment();
-    items.forEach(i => fragment.appendChild(makeGameCard(i)));
-    scroller.appendChild(fragment);
     section.appendChild(scroller);
-    return section;
+    return { section, scroller, items };
   }
 
   function renderHome() {
@@ -104,26 +107,37 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Pre-filter once for each category to avoid filtering each render
-    definitions.forEach(def => {
+    const carousels = definitions.map(def => {
       const filtered = raw.filter(def.filter).sort((a,b)=> b.recommendationsTotal - a.recommendationsTotal).slice(0, MAX_HOME_PER_CATEGORY);
-      if (!filtered.length) return;
-      container.appendChild(createCarousel(def.name.toUpperCase(), filtered));
-    });
+      if (!filtered.length) return null;
+      return createCarousel(def.name.toUpperCase(), filtered);
+    }).filter(Boolean);
+
+    // append sections in batches to avoid blocking
+    let i = 0;
+    function appendBatch() {
+      const batch = carousels.slice(i, i+1);
+      batch.forEach(c => {
+        const frag = document.createDocumentFragment();
+        c.items.forEach(item => frag.appendChild(makeGameCard(item)));
+        c.scroller.appendChild(frag);
+        container.appendChild(c.section);
+      });
+      i += 1;
+      if (i < carousels.length) requestAnimationFrame(appendBatch);
+    }
+    appendBatch();
   }
 
   function renderFreeVertical(page = 1, perPage = FREE_PAGE_SIZE) {
     freeContainer.innerHTML = '';
     const raw = window.forwardIndex || [];
     const freeGames = raw.filter(g => g.isFree);
-    if (!freeGames.length) {
-      freeContainer.innerHTML = '<p class="small">No free games in dataset.</p>';
-      return;
-    }
+    if (!freeGames.length) return;
 
     const start = (page-1)*perPage;
     const end = start+perPage;
-    const fragment = document.createDocumentFragment();
+    const frag = document.createDocumentFragment();
     freeGames.slice(start, end).forEach(g => {
       const card = document.createElement('div');
       card.className = 'free-game-card';
@@ -132,9 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const desc = escapeHtml(g.shortDescription || 'No description available.');
       card.innerHTML = `<img src="${thumb}" alt="${name}" onerror="this.src='${PLACEHOLDER}'"/><div class="free-info"><h4>${name}</h4><p>${desc}</p></div>`;
       card.addEventListener('click', () => g.appid && window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`, '_blank'));
-      fragment.appendChild(card);
+      frag.appendChild(card);
     });
-    freeContainer.appendChild(fragment);
+    freeContainer.appendChild(frag);
   }
 
   document.addEventListener('datasetUploaded', () => {
