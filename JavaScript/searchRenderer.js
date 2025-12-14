@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
       card.style.cssText='display:flex;align-items:flex-start;gap:12px;margin:6px 0;padding:10px;background:#152d3a;border-radius:6px;cursor:pointer;transition:all 0.1s;';
       card.addEventListener('mouseenter',()=>{card.style.background='#1a3a4a'; card.style.transform='translateX(3px)';});
       card.addEventListener('mouseleave',()=>{card.style.background='#152d3a'; card.style.transform='translateX(0)';});
-      if(g.appid) card.addEventListener('click',()=>window.open(https://store.steampowered.com/app/${encodeURIComponent(g.appid)},'_blank'));
+      if(g.appid) card.addEventListener('click',()=>window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'));
 
       const img=document.createElement('img'); img.src=g.headerImage||PLACEHOLDER; img.width=120; img.height=70;
       img.style.cssText='object-fit:cover;border-radius:4px;flex-shrink:0;background:#12232d;';
@@ -107,8 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const desc=document.createElement('p'); const dtxt=g.desc||'No description available.'; desc.textContent=dtxt.length>140?dtxt.slice(0,140)+'...':dtxt; desc.style.cssText='margin:0;color:#98a6b3;font-size:13px;line-height:1.4;';
 
       const meta=document.createElement('div'); meta.style.cssText='display:flex;gap:8px;margin-top:6px;font-size:12px;color:#98a6b3;flex-wrap:wrap;';
-      if(g.metacriticScore>0){ const m=document.createElement('span'); m.innerHTML=<strong style="color:#66c0f4;">Metacritic:</strong> ${g.metacriticScore}; meta.appendChild(m); }
-      if(g.recommendationsTotal>0){ const r=document.createElement('span'); r.innerHTML=<strong style="color:#66c0f4;">Recs:</strong> ${g.recommendationsTotal.toLocaleString()}; meta.appendChild(r); }
+      if(g.metacriticScore>0){ const m=document.createElement('span'); m.innerHTML=`<strong style="color:#66c0f4;">Metacritic:</strong> ${g.metacriticScore}`; meta.appendChild(m); }
+      if(g.recommendationsTotal>0){ const r=document.createElement('span'); r.innerHTML=`<strong style="color:#66c0f4;">Recs:</strong> ${g.recommendationsTotal.toLocaleString()}`; meta.appendChild(r); }
       if(g.isFree){ const f=document.createElement('span'); f.textContent='FREE'; f.style.cssText='background:#66c0f4;color:#07141d;padding:2px 6px;border-radius:3px;font-weight:700;'; meta.appendChild(f); }
 
       info.appendChild(title); info.appendChild(desc); if(meta.children.length) info.appendChild(meta);
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalPages=Math.ceil(currentResults.length/PAGE_SIZE);
     if(totalPages<=1) return;
     const container=document.createElement('div'); container.style.cssText='display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:12px;';
-    function addBtn(p){ const b=document.createElement('button'); b.textContent=p; b.style.cssText=padding:4px 8px;border-radius:4px;border:1px solid #888;background:${p===currentPage?'#66c0f4':'#152d3a'};color:${p===currentPage?'#07141d':'#ccc'};cursor:pointer;; if(p!==currentPage) b.addEventListener('click',()=>renderPage(p)); container.appendChild(b); }
+    function addBtn(p){ const b=document.createElement('button'); b.textContent=p; b.style.cssText=`padding:4px 8px;border-radius:4px;border:1px solid #888;background:${p===currentPage?'#66c0f4':'#152d3a'};color:${p===currentPage?'#07141d':'#ccc'};cursor:pointer;`; if(p!==currentPage) b.addEventListener('click',()=>renderPage(p)); container.appendChild(b); }
     function addDots(){ const d=document.createElement('span'); d.textContent='...'; d.style.color='#ccc'; d.style.padding='0 4px'; container.appendChild(d); }
 
     if(currentPage>1){ const prev=document.createElement('button'); prev.textContent='← Prev'; prev.style.cssText='padding:4px 8px'; prev.addEventListener('click',()=>renderPage(currentPage-1)); container.appendChild(prev); }
@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scored.sort((a,b)=>b.score-a.score);
     currentResults=scored.map(s=>normalizedForward[s.idx]);
     const t1=performance.now();
-    if(timeDiv) timeDiv.textContent=Search time: ${(t1-t0).toFixed(1)}ms;
+    if(timeDiv) timeDiv.textContent=`Search time: ${(t1-t0).toFixed(1)}ms`;
     renderPage(1);
   }
 
