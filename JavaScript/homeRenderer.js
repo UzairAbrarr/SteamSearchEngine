@@ -1,119 +1,114 @@
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('home-categories');
   const freeContainer = document.getElementById('freeGamesList');
   const PLACEHOLDER = '/mnt/data/f84e3cff-c908-45f9-8373-2e034c71a892.png';
   const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
-  let forwardIndex = [];
-
-  async function loadDefaultDatasets() {
+  // --- Load final datasets quickly ---
+  async function loadFinalDatasets() {
     const basePath = './PreDefinedJsonsFile/';
     try {
-      const [fwd1Res, fwd2Res] = await Promise.all([
-        fetch(basePath + 'forwardIndex_part1.json'),
-        fetch(basePath + 'forwardIndex_part2.json')
+      const [lexicon, invertedIndex, fwd1, fwd2] = await Promise.all([
+        fetch(basePath+'lexicon.json').then(r=>r.json()),
+        fetch(basePath+'invertedIndex.json').then(r=>r.json()),
+        fetch(basePath+'forwardIndex_part1.json').then(r=>r.json()),
+        fetch(basePath+'forwardIndex_part2.json').then(r=>r.json())
       ]);
-      const [fwd1, fwd2] = await Promise.all([fwd1Res.json(), fwd2Res.json()]);
 
-      forwardIndex = [...fwd1, ...fwd2].map((d, idx) => {
-        const g = {
-          docId: idx,
-          appid: String(d.appid || d.appId || d.id || '').trim(),
-          name: String(d.name || d.title || '').trim(),
-          shortDescription: String(d.short_description || d.shortDescription || d.description || '').trim(),
-          headerImage: String(d.header_image || d.headerImage || d.image || d.header || '').trim(),
-          metacriticScore: parseInt(d.metacritic_score || d.metacriticScore || 0, 10) || 0,
-          recommendationsTotal: parseInt(d.recommendations_total || d.recommendationsTotal || d.recs || 0, 10) || 0,
-          isFree: String(d.is_free || d.isFree || '').toLowerCase() === 'true' || Number(d.is_free || d.isFree || 0) === 1
-        };
-        return g;
-      });
+      window.lexicon = lexicon;
+      window.invertedIndex = invertedIndex;
+      window.forwardIndex = [...fwd1, ...fwd2];
 
-      // Precompute categories
-      computeCategories();
+      // Precompute structures
+      window.appKeySet = new Set(window.forwardIndex.map(g=>(g.appid||g.name||'').toLowerCase()));
+      window.freeGames = window.forwardIndex.filter(g=>g.isFree);
+      
+      // Precompute top-N for categories
+      const topN = (arr,key,N)=>arr.slice().sort((a,b)=>b[key]-a[key]).slice(0,N);
+      window.categoryCache = {
+        Popular: topN(window.forwardIndex,'recommendationsTotal',MAX_HOME_PER_CATEGORY),
+        TopMetacritic: topN(window.forwardIndex,'metacriticScore',MAX_HOME_PER_CATEGORY),
+        FreeGames: window.freeGames.slice(0,MAX_HOME_PER_CATEGORY),
+        Sports: window.forwardIndex.filter(g=>/sports/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY),
+        Vehicle: window.forwardIndex.filter(g=>/vehicle|car|bike|cycle|racing/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY),
+        Horror: window.forwardIndex.filter(g=>/horror|zombi|zombie|scary|ghost/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY)
+      };
 
       document.dispatchEvent(new Event('datasetUploaded'));
-    } catch (e) {
-      console.error(e);
+    } catch(e) {
+      console.error('Failed to load datasets', e);
       container.innerHTML = '<p class="small">Failed to load dataset.</p>';
     }
   }
+  loadFinalDatasets();
 
-  // Precompute category lists
-  const definitions = [
-    { name: 'Popular', filter: g => g.recommendationsTotal >= 5000, list: [] },
-    { name: 'Free Games', filter: g => g.isFree === true, list: [] },
-    { name: 'Top Metacritic', filter: g => g.metacriticScore >= 80, list: [] },
-    { name: 'Sports', filter: g => /sports/i.test((g.name||'') + ' ' + (g.shortDescription||'')), list: [] },
-    { name: 'Vehicle', filter: g => /vehicle|car|bike|cycle|racing/i.test((g.name||'') + ' ' + (g.shortDescription||'')), list: [] },
-    { name: 'Horror', filter: g => /horror|zombi|zombie|scary|ghost/i.test((g.name||'') + ' ' + (g.shortDescription||'')), list: [] }
-  ];
+  // --- Minimal rendering helpers ---
+  const escapeHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  function computeCategories() {
-    definitions.forEach(def => {
-      def.list = forwardIndex.filter(def.filter)
-        .sort((a,b) => b.recommendationsTotal - a.recommendationsTotal)
-        .slice(0, MAX_HOME_PER_CATEGORY);
-    });
-  }
-
-  function escapeHtml(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-  function makeGameCard(g) {
-    const wrapper = document.createElement(g.appid ? 'a' : 'div');
-    if (g.appid) { wrapper.href = `https://store.steampowered.com/app/${g.appid}`; wrapper.target='_blank'; wrapper.rel='noopener noreferrer'; }
-    wrapper.className = 'game-card';
-    const thumb = g.headerImage || PLACEHOLDER;
-    const name = escapeHtml(g.name || 'Untitled');
-    const short = escapeHtml(g.shortDescription || 'No description available.');
-    wrapper.innerHTML = `
-      <div class="thumb" style="background-image:url('${thumb}')"></div>
-      <div class="meta"><div><h4>${name}</h4><p>${short}</p></div><div><span class="price-badge">${g.isFree?'Free':''}</span></div></div>
-      <div class="hover-box" aria-hidden="true"><h4>${name}</h4><p>${short}</p></div>
+  const makeGameCard = g=>{
+    const wrapper = document.createElement(g.appid?'a':'div');
+    if(g.appid){ wrapper.href=`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`; wrapper.target='_blank'; wrapper.rel='noopener noreferrer'; }
+    wrapper.className='game-card';
+    wrapper.innerHTML=`
+      <div class="thumb" style="background-image:url('${escapeHtml(g.headerImage||PLACEHOLDER)}')"></div>
+      <div class="meta"><div><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>
+      <div><span class="price-badge">${g.isFree?'Free':''}</span></div></div>
+      <div class="hover-box" aria-hidden="true"><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>
     `;
+    wrapper.addEventListener('mouseenter',()=>{ const hb=wrapper.querySelector('.hover-box'); if(hb) hb.style.display='block'; });
+    wrapper.addEventListener('mouseleave',()=>{ const hb=wrapper.querySelector('.hover-box'); if(hb) hb.style.display='none'; });
     return wrapper;
-  }
+  };
 
-  function renderHome() {
-    container.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    definitions.forEach(def => {
-      if (!def.list.length) return;
-      const section = document.createElement('div');
-      section.className = 'home-category';
-      section.innerHTML = `<div class="category-head"><h3>${def.name.toUpperCase()}</h3></div>`;
-      const scroller = document.createElement('div');
-      scroller.className = 'home-games';
-      def.list.forEach(g => scroller.appendChild(makeGameCard(g)));
-      section.appendChild(scroller);
-      frag.appendChild(section);
+  const createCarousel = (title, items)=>{
+    const section = document.createElement('div');
+    section.className='home-category';
+    section.innerHTML=`<div class="category-head"><h3>${escapeHtml(title)}</h3><div class="category-controls"></div></div>`;
+    const scroller=document.createElement('div'); scroller.className='home-games';
+    const frag=document.createDocumentFragment();
+    items.forEach(i=>frag.appendChild(makeGameCard(i)));
+    scroller.appendChild(frag);
+    const dots=document.createElement('div'); dots.className='carousel-dots';
+    section.appendChild(scroller); section.appendChild(dots);
+    return section;
+  };
+
+  const renderHome = ()=>{
+    container.innerHTML='';
+    const cache = window.categoryCache||{};
+    Object.keys(cache).forEach(cat=>{
+      const items=cache[cat];
+      if(items && items.length) container.appendChild(createCarousel(cat.toUpperCase(), items));
     });
-    container.appendChild(frag);
-  }
+  };
 
-  function renderFreeVertical(page = 1, perPage = FREE_PAGE_SIZE) {
-    freeContainer.innerHTML = '';
-    const freeGames = forwardIndex.filter(g => g.isFree);
-    const start = (page-1)*perPage, end = start+perPage;
-    const frag = document.createDocumentFragment();
-    freeGames.slice(start,end).forEach(g => {
-      const card = document.createElement('div');
-      card.className = 'free-game-card';
-      const thumb = escapeHtml(g.headerImage || PLACEHOLDER);
-      const name = escapeHtml(g.name || 'Untitled');
-      const desc = escapeHtml(g.shortDescription || 'No description available.');
-      card.innerHTML = `<img src="${thumb}" alt="${name}" onerror="this.src='${PLACEHOLDER}'"/><div class="free-info"><h4>${name}</h4><p>${desc}</p></div>`;
-      card.addEventListener('click', () => g.appid && window.open(`https://store.steampowered.com/app/${g.appid}`,'_blank'));
+  const renderFreeVertical = (page=1, perPage=FREE_PAGE_SIZE)=>{
+    freeContainer.innerHTML='';
+    const freeGames = window.freeGames||[];
+    if(!freeGames.length){ freeContainer.innerHTML='<p class="small">No free games.</p>'; return; }
+    const start=(page-1)*perPage; const end=start+perPage;
+    const frag=document.createDocumentFragment();
+    freeGames.slice(start,end).forEach(g=>{
+      const card=document.createElement('div'); card.className='free-game-card';
+      card.innerHTML=`<img src="${escapeHtml(g.headerImage||PLACEHOLDER)}" alt="${escapeHtml(g.name||'Untitled')}" onerror="this.src='${PLACEHOLDER}'" /><div class="free-info"><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>`;
+      card.addEventListener('click',()=>{ if(g.appid) window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'); });
       frag.appendChild(card);
     });
     freeContainer.appendChild(frag);
-  }
+    // pager can stay if needed, simplified
+  };
 
-  document.addEventListener('datasetUploaded', () => {
+  document.addEventListener('datasetUploaded',()=>{
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-home')?.classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelector('.nav-btn[data-page="home"]')?.classList.add('active');
     renderHome();
     renderFreeVertical();
   });
 
-  loadDefaultDatasets();
+  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b=>{
+    b.addEventListener('click',()=>renderFreeVertical());
+  });
 });
