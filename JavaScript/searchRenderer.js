@@ -5,7 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if(!searchPage) return;
 
   // --- UI Setup ---
-  let input, searchBtn, resultsDiv, pagerDiv, timeDiv, suggestDiv;
+  let input, searchBtn, resultsDiv, pagerDiv, timeDiv, suggestDiv, wrapper;
+
   function ensureSearchUI() {
     input = document.getElementById('searchInput');
     searchBtn = document.getElementById('searchBtn');
@@ -18,24 +19,44 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!timeDiv){ timeDiv=document.createElement('div'); timeDiv.id='searchTime'; timeDiv.style.cssText='color:#98a6b3;font-size:12px;margin-top:4px;text-align:right;'; searchPage.appendChild(timeDiv); }
 
     if(!input || !searchBtn){
-      const wrapper=document.createElement('div'); wrapper.style.cssText='display:flex;gap:6px;margin-top:10px;position:relative;';
-      input=document.createElement('input'); input.id='searchInput'; input.type='search'; input.placeholder='Search games'; input.style.flex='1';
+      wrapper=document.createElement('div');
+      wrapper.style.cssText='display:flex;gap:6px;margin-top:10px;position:relative;';
+
+      input=document.createElement('input');
+      input.id='searchInput';
+      input.type='search';
+      input.placeholder='Search games';
+      input.style.flex='1';
       wrapper.appendChild(input);
 
-      searchBtn=document.createElement('button'); searchBtn.id='searchBtn'; searchBtn.textContent='Search';
+      searchBtn=document.createElement('button');
+      searchBtn.id='searchBtn';
+      searchBtn.textContent='Search';
       searchBtn.style.cssText='padding:6px 10px;border-radius:4px;border:none;background:#66c0f4;color:#07141d;cursor:pointer;font-weight:600;';
       wrapper.appendChild(searchBtn);
 
       searchPage.prepend(wrapper);
 
-      // Suggestion dropdown
-      suggestDiv=document.createElement('div'); suggestDiv.id='searchSuggestions';
-      suggestDiv.style.cssText='position:absolute;top:38px;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
+      // Suggestion dropdown (attached to wrapper)
+      suggestDiv=document.createElement('div');
+      suggestDiv.id='searchSuggestions';
+      suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
       wrapper.appendChild(suggestDiv);
     } else {
-      suggestDiv = document.getElementById('searchSuggestions') || document.createElement('div');
-      suggestDiv.style.cssText='position:absolute;top:38px;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
-      if(!suggestDiv.parentNode) input.parentNode.appendChild(suggestDiv);
+      wrapper = input.parentElement;
+      wrapper.style.position = 'relative';
+
+      suggestDiv = document.getElementById('searchSuggestions') || null;
+      if(!suggestDiv){
+        suggestDiv=document.createElement('div');
+        suggestDiv.id='searchSuggestions';
+        suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
+        wrapper.appendChild(suggestDiv);
+      } else {
+        // ensure the suggestDiv is inside the wrapper so absolute positioning works
+        if(!suggestDiv.parentNode || suggestDiv.parentNode !== wrapper) wrapper.appendChild(suggestDiv);
+        suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
+      }
     }
   }
   ensureSearchUI();
@@ -84,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   buildIndices();
   document.addEventListener('datasetUploaded', ()=>buildIndices());
 
+  // --- Render page (original full card + pager logic restored exactly) ---
   function renderPage(page=1){
     currentPage=page;
     resultsDiv.innerHTML='';
@@ -134,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pagerDiv.appendChild(container);
   }
 
-  // --- Search ---
+  // --- Search logic ---
   function triggerSearch(queryOverride){
     suggestDiv.style.display='none'; // hide suggestions when search is triggered
 
@@ -172,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPage(1);
   }
 
-  // --- Suggestions ---
+  // --- Suggestions (dropdown with cover image + desc + FREE badge) ---
   function showSuggestions(query){
     const q=query.toLowerCase().trim();
     if(!q){ suggestDiv.style.display='none'; return; }
@@ -203,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
       img.style.cssText='object-fit:cover;border-radius:3px;flex-shrink:0;background:#12232d;';
       img.onerror=function(){ this.onerror=null; this.src=PLACEHOLDER; };
 
-      const info=document.createElement('div'); info.style.flex='1;min-width:0;';
+      const info=document.createElement('div'); info.style.cssText='flex:1;min-width:0;';
       const title=document.createElement('div'); title.textContent=g.name; title.style.cssText='color:#fff;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
       const desc=document.createElement('div'); desc.textContent=g.desc.length>60?g.desc.slice(0,60)+'...':g.desc; desc.style.cssText='color:#98a6b3;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
       const badge=document.createElement('span'); badge.textContent=g.isFree?'FREE':''; badge.style.cssText='background:#66c0f4;color:#07141d;padding:1px 4px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px;';
