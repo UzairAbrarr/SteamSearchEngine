@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- START: Load default datasets from local PreDefinedJsonsFile ---
   async function loadDefaultDatasets() {
-    const basePath = '/PreDefinedJsonsFile/'; // folder where all four files are
+    const basePath = './PreDefinedJsonsFile/'; // folder where all four files are
     try {
       const lexRes = await fetch(basePath + 'lexicon.json');
       window.lexicon = await lexRes.json();
