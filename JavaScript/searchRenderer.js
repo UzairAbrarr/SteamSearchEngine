@@ -1,11 +1,70 @@
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('[searchRenderer] starting...');
+// searchRenderer.js
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[searchRenderer] Starting Fame-Biased Engine (Image Fix)...');
 
-  const searchPage = document.getElementById('page-search');
-  if(!searchPage) return;
+  // --- Load Vectors (Optional) ---
+  let wordVectors = {};
+  try {
+    const mod = await import('./WordVectors.js');
+    wordVectors = mod.default || {};
+  } catch (err) {
+    console.warn('[searchRenderer] Semantic search disabled (Vectors missing).');
+  }
+
+  // ====== 1. CONFIGURATION ======
+
+  // CONCEPT MAPPING (Unchanged)
+  const CONCEPT_MAP = {
+    "vehicle": ["car", "cars", "truck", "bus", "racing", "drive", "driving", "simulator", "automobil", "motor"],
+    "car": ["vehicle", "racing", "drive", "drift", "rally", "motorsport", "auto", "speed", "forza", "gran", "turismo", "need", "wanted", "heat", "carbon"],
+    "racing": ["car", "vehicle", "speed", "f1", "formula", "rally", "drift", "moto", "bike", "forza", "assetto", "crew"],
+    
+    "fps": ["shooter", "gun", "weapon", "war", "combat", "sniper", "strike", "counter", "cod", "call", "duty", "battlefield", "global", "offensive", "csgo", "apex", "valorant", "doom", "halo", "left", "dead"],
+    "shooter": ["fps", "gun", "shooting", "kill", "warfare", "sniper"],
+    
+    "rpg": ["role", "playing", "adventure", "quest", "fantasy", "dragon", "witcher", "souls", "elden", "ring", "skyrim", "fallout", "baldur", "persona", "final", "fantasy"],
+    "horror": ["scary", "zombie", "dead", "survival", "resident", "evil", "silent", "fear", "outlast", "amnesia", "phasmophobia"],
+    "soccer": ["football", "fifa", "pes", "manager", "sport", "fc"],
+    "strategy": ["rts", "tactical", "war", "civilization", "city", "build", "manage", "empire", "age", "empires", "total", "war"]
+  };
+
+  // SCORING WEIGHTS (Unchanged)
+  const S_EXACT_PHRASE = 1000; 
+  const S_TITLE_TOKEN  = 200;  
+  const S_DESC_TOKEN   = 50;   
+  const S_CONCEPT_TITLE= 150;  
+  const S_SEMANTIC     = 100;  
+  const POPULARITY_POWER = 50; 
+
+  // --- Helpers ---
+  function getVector(text) {
+    if (!wordVectors) return null;
+    const tokens = String(text).toLowerCase().split(/[^a-z0-9]+/);
+    const vecs = [];
+    for (const t of tokens) {
+      if (t.length > 2 && wordVectors[t]) vecs.push(wordVectors[t]);
+    }
+    if (vecs.length === 0) return null;
+    const dim = vecs[0].length;
+    const avg = new Array(dim).fill(0);
+    for (const v of vecs) for (let i = 0; i < dim; i++) avg[i] += v[i];
+    for (let i = 0; i < dim; i++) avg[i] /= vecs.length;
+    return avg;
+  }
+
+  function cosineSim(a, b) {
+    if (!a || !b) return 0;
+    let dot=0, ma=0, mb=0;
+    for(let i=0; i<a.length; i++) { dot+=a[i]*b[i]; ma+=a[i]*a[i]; mb+=b[i]*b[i]; }
+    return ma===0||mb===0 ? 0 : dot/(Math.sqrt(ma)*Math.sqrt(mb));
+  }
 
   // --- UI Setup ---
-  let input, searchBtn, resultsDiv, pagerDiv, timeDiv, suggestDiv, wrapper;
+  const searchPage = document.getElementById('page-search');
+  if (!searchPage) return;
+
+  let input, searchBtn, resultsDiv, pagerDiv, timeDiv, suggestDiv;
+  const PLACEHOLDER = 'data:image/svg+xml,<svg width="180" height="110" xmlns="http://www.w3.org/2000/svg"><rect width="180" height="110" fill="%23152d3a"/><text x="50%" y="50%" fill="%2398a6b3" font-size="14" font-family="Arial" text-anchor="middle" dominant-baseline="middle">No Image</text></svg>';
 
   function ensureSearchUI() {
     input = document.getElementById('searchInput');
@@ -14,232 +73,234 @@ document.addEventListener('DOMContentLoaded', () => {
     pagerDiv = document.getElementById('searchPager');
     timeDiv = document.getElementById('searchTime');
 
-    if(!resultsDiv){ resultsDiv=document.createElement('div'); resultsDiv.id='searchResults'; searchPage.appendChild(resultsDiv); }
-    if(!pagerDiv){ pagerDiv=document.createElement('div'); pagerDiv.id='searchPager'; searchPage.appendChild(pagerDiv); }
-    if(!timeDiv){ timeDiv=document.createElement('div'); timeDiv.id='searchTime'; timeDiv.style.cssText='color:#98a6b3;font-size:12px;margin-top:4px;text-align:right;'; searchPage.appendChild(timeDiv); }
+    if (!resultsDiv) { resultsDiv = document.createElement('div'); resultsDiv.id = 'searchResults'; searchPage.appendChild(resultsDiv); }
+    if (!pagerDiv) { pagerDiv = document.createElement('div'); pagerDiv.id = 'searchPager'; searchPage.appendChild(pagerDiv); }
+    if (!timeDiv) { timeDiv = document.createElement('div'); timeDiv.id = 'searchTime'; timeDiv.style.cssText = 'color:#98a6b3;font-size:12px;margin-top:4px;text-align:right;'; searchPage.appendChild(timeDiv); }
 
-    if(!input || !searchBtn){
-      wrapper=document.createElement('div');
-      wrapper.style.cssText='display:flex;gap:6px;margin-top:10px;position:relative;';
-
-      input=document.createElement('input');
-      input.id='searchInput';
-      input.type='search';
-      input.placeholder='Search games';
-      input.style.flex='1';
-      wrapper.appendChild(input);
-
-      searchBtn=document.createElement('button');
-      searchBtn.id='searchBtn';
-      searchBtn.textContent='Search';
-      searchBtn.style.cssText='padding:6px 10px;border-radius:4px;border:none;background:#66c0f4;color:#07141d;cursor:pointer;font-weight:600;';
-      wrapper.appendChild(searchBtn);
-
+    let wrapper;
+    if (!input) {
+      wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;gap:6px;margin-top:10px;position:relative;';
+      input = document.createElement('input'); input.id = 'searchInput'; input.type = 'search'; input.placeholder = 'Search games (e.g. Forza, FPS, Car)'; input.style.flex = '1';
+      searchBtn = document.createElement('button'); searchBtn.id = 'searchBtn'; searchBtn.textContent = 'Search'; searchBtn.style.cssText = 'padding:6px 10px;border-radius:4px;border:none;background:#66c0f4;color:#07141d;cursor:pointer;font-weight:600;';
+      wrapper.appendChild(input); wrapper.appendChild(searchBtn);
       searchPage.prepend(wrapper);
-
-      // Suggestion dropdown (attached to wrapper)
-      suggestDiv=document.createElement('div');
-      suggestDiv.id='searchSuggestions';
-      suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
-      wrapper.appendChild(suggestDiv);
     } else {
-      wrapper = input.parentElement;
-      wrapper.style.position = 'relative';
+      wrapper = input.parentElement; wrapper.style.position = 'relative';
+    }
 
-      suggestDiv = document.getElementById('searchSuggestions') || null;
-      if(!suggestDiv){
-        suggestDiv=document.createElement('div');
-        suggestDiv.id='searchSuggestions';
-        suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
-        wrapper.appendChild(suggestDiv);
-      } else {
-        // ensure the suggestDiv is inside the wrapper so absolute positioning works
-        if(!suggestDiv.parentNode || suggestDiv.parentNode !== wrapper) wrapper.appendChild(suggestDiv);
-        suggestDiv.style.cssText='position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
-      }
+    suggestDiv = document.getElementById('searchSuggestions');
+    if (!suggestDiv) {
+      suggestDiv = document.createElement('div');
+      suggestDiv.id = 'searchSuggestions';
+      suggestDiv.style.cssText = 'position:absolute;left:0;width:100%;background:#152d3a;border:1px solid #223a50;max-height:300px;overflow-y:auto;display:none;z-index:99;border-radius:4px;';
+      wrapper.appendChild(suggestDiv);
     }
   }
   ensureSearchUI();
 
-  const PAGE_SIZE=7;
-  const PLACEHOLDER='data:image/svg+xml,<svg width="180" height="110" xmlns="http://www.w3.org/2000/svg"><rect width="180" height="110" fill="%23152d3a"/><text x="50%" y="50%" fill="%2398a6b3" font-size="14" font-family="Arial" text-anchor="middle" dominant-baseline="middle">No Image</text></svg>';
+  // --- Data ---
+  let docs = [];
+  let currentResults = [], currentPage = 1, PAGE_SIZE = 7;
 
-  let normalizedForward=[], appidToIndex=new Map(), invIndex=new Map(), barrels={}, currentResults=[], currentPage=1;
+  function buildIndices() {
+    docs = [];
+    const rawData = window.forwardIndex || [];
+    
+    let maxRec = 1;
+    rawData.forEach(d => { if((d.recommendationsTotal||0) > maxRec) maxRec = d.recommendationsTotal; });
+    const logMaxRec = Math.log10(maxRec + 1);
 
-  function normalizeDoc(raw){
-    if(!raw) return null;
-    const name=String(raw.name||raw.title||'').trim();
-    const desc=String(raw.short_description||raw.description||'').trim();
-    return {
-      raw,
-      appid:String(raw.appid||raw.id||''),
-      name, nameLc:name.toLowerCase(),
-      desc, descLc:desc.toLowerCase(),
-      headerImage:String(raw.headerImage||raw.image||''),
-      metacriticScore:parseInt(raw.metacritic_score||0,10)||0,
-      recommendationsTotal:parseInt(raw.recommendationsTotal||0,10)||0,
-      isFree:!!raw.isFree
-    };
-  }
+    rawData.forEach((raw, idx) => {
+      const name = String(raw.name || raw.title || '').trim();
+      const desc = String(raw.short_description || raw.description || '').trim();
+      const rec = parseInt(raw.recommendationsTotal || 0);
+      const meta = parseInt(raw.metacritic_score || 0);
+      
+      const pop = ((Math.log10(rec + 1) / logMaxRec) * 0.85) + ((meta / 100) * 0.15);
 
-  function buildIndices(){
-    normalizedForward=[]; appidToIndex.clear(); invIndex.clear(); barrels={};
-    const fwd=window.forwardIndex||[];
-    fwd.forEach((doc,i)=>{
-      const norm=normalizeDoc(doc);
-      normalizedForward.push(norm);
-      if(norm.appid) appidToIndex.set(norm.appid,i);
+      const vectorText = name + " " + desc; 
+      const vec = getVector(vectorText);
 
-      const tokens=norm.nameLc.split(/\s+/).concat(norm.descLc.split(/\s+/));
-      tokens.forEach(tok=>{
-        if(!invIndex.has(tok)) invIndex.set(tok,new Set());
-        invIndex.get(tok).add(i);
+      // --- FIX: Robust Image Detection ---
+      // Checks all common property names for images in Steam datasets
+      const rawImg = raw.header_image || raw.headerImage || raw.image || raw.img || raw.capsule_image || raw.capsule_imagev5;
 
-        const first=tok[0];
-        if(!barrels[first]) barrels[first]=new Map();
-        barrels[first].set(tok, invIndex.get(tok));
+      docs.push({
+        idx, raw, name, desc,
+        nameLc: name.toLowerCase(),
+        descLc: desc.toLowerCase(),
+        pop: pop,
+        vec: vec,
+        img: rawImg, // Use the fixed image variable
+        meta: meta, rec: rec, isFree: !!raw.isFree
       });
     });
-    console.log('[searchRenderer] indices ready:', normalizedForward.length, 'docs');
+    console.log('[searchRenderer] Index built. Total Docs:', docs.length);
   }
   buildIndices();
-  document.addEventListener('datasetUploaded', ()=>buildIndices());
+  document.addEventListener('datasetUploaded', buildIndices);
 
-  // --- Render page (original full card + pager logic restored exactly) ---
-  function renderPage(page=1){
-    currentPage=page;
-    resultsDiv.innerHTML='';
-    const start=(page-1)*PAGE_SIZE; const end=Math.min(start+PAGE_SIZE,currentResults.length);
-    if(currentResults.length===0){ resultsDiv.innerHTML='<p style="color:#98a6b3;text-align:center;">No results found</p>'; pagerDiv.innerHTML=''; return; }
 
-    for(let i=start;i<end;i++){
-      const g=currentResults[i];
-      const card=document.createElement('div');
-      card.style.cssText='display:flex;align-items:flex-start;gap:12px;margin:6px 0;padding:10px;background:#152d3a;border-radius:6px;cursor:pointer;transition:all 0.1s;';
-      card.addEventListener('mouseenter',()=>{card.style.background='#1a3a4a'; card.style.transform='translateX(3px)';});
-      card.addEventListener('mouseleave',()=>{card.style.background='#152d3a'; card.style.transform='translateX(0)';});
-      if(g.appid) card.addEventListener('click',()=>window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'));
+  // ====== 2. THE LOGIC (Unchanged) ======
+  function triggerSearch(queryOverride) {
+    suggestDiv.style.display = 'none';
+    const t0 = performance.now();
+    const query = (queryOverride || input.value || '').trim().toLowerCase();
 
-      const img=document.createElement('img'); img.src=g.headerImage||PLACEHOLDER; img.width=120; img.height=70;
-      img.style.cssText='object-fit:cover;border-radius:4px;flex-shrink:0;background:#12232d;';
-      img.onerror=function(){ this.onerror=null; this.src=PLACEHOLDER; };
-
-      const info=document.createElement('div'); info.style.flex='1;min-width:0;';
-      const title=document.createElement('h4'); title.textContent=g.name||'Untitled'; title.style.cssText='margin:0 0 6px 0;color:#fff;font-size:15px;font-weight:600;';
-      const desc=document.createElement('p'); const dtxt=g.desc||'No description available.'; desc.textContent=dtxt.length>140?dtxt.slice(0,140)+'...':dtxt; desc.style.cssText='margin:0;color:#98a6b3;font-size:13px;line-height:1.4;';
-
-      const meta=document.createElement('div'); meta.style.cssText='display:flex;gap:8px;margin-top:6px;font-size:12px;color:#98a6b3;flex-wrap:wrap;';
-      if(g.metacriticScore>0){ const m=document.createElement('span'); m.innerHTML=`<strong style="color:#66c0f4;">Metacritic:</strong> ${g.metacriticScore}`; meta.appendChild(m); }
-      if(g.recommendationsTotal>0){ const r=document.createElement('span'); r.innerHTML=`<strong style="color:#66c0f4;">Recs:</strong> ${g.recommendationsTotal.toLocaleString()}`; meta.appendChild(r); }
-      if(g.isFree){ const f=document.createElement('span'); f.textContent='FREE'; f.style.cssText='background:#66c0f4;color:#07141d;padding:2px 6px;border-radius:3px;font-weight:700;'; meta.appendChild(f); }
-
-      info.appendChild(title); info.appendChild(desc); if(meta.children.length) info.appendChild(meta);
-      card.appendChild(img); card.appendChild(info);
-      resultsDiv.appendChild(card);
+    if (!query) {
+      currentResults = []; renderPage(1);
+      if(timeDiv) timeDiv.textContent = '0ms';
+      return;
     }
 
-    // pager
-    pagerDiv.innerHTML='';
-    const totalPages=Math.ceil(currentResults.length/PAGE_SIZE);
-    if(totalPages<=1) return;
-    const container=document.createElement('div'); container.style.cssText='display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:12px;';
-    function addBtn(p){ const b=document.createElement('button'); b.textContent=p; b.style.cssText=`padding:4px 8px;border-radius:4px;border:1px solid #888;background:${p===currentPage?'#66c0f4':'#152d3a'};color:${p===currentPage?'#07141d':'#ccc'};cursor:pointer;`; if(p!==currentPage) b.addEventListener('click',()=>renderPage(p)); container.appendChild(b); }
-    function addDots(){ const d=document.createElement('span'); d.textContent='...'; d.style.color='#ccc'; d.style.padding='0 4px'; container.appendChild(d); }
+    const queryTokens = query.split(/\s+/).filter(t => t.length > 0);
+    const queryVec = getVector(query);
 
-    if(currentPage>1){ const prev=document.createElement('button'); prev.textContent='← Prev'; prev.style.cssText='padding:4px 8px'; prev.addEventListener('click',()=>renderPage(currentPage-1)); container.appendChild(prev); }
-    let startPage=Math.max(1,currentPage-3); let endPage=Math.min(totalPages,currentPage+3);
-    if(startPage>1){ addBtn(1); if(startPage>2) addDots(); }
-    for(let p=startPage;p<=endPage;p++) addBtn(p);
-    if(endPage<totalPages){ if(endPage<totalPages-1) addDots(); addBtn(totalPages); }
-    if(currentPage<totalPages){ const next=document.createElement('button'); next.textContent='Next →'; next.style.cssText='padding:4px 8px'; next.addEventListener('click',()=>renderPage(currentPage+1)); container.appendChild(next); }
-
-    pagerDiv.appendChild(container);
-  }
-
-  // --- Search logic ---
-  function triggerSearch(queryOverride){
-    suggestDiv.style.display='none'; // hide suggestions when search is triggered
-
-    const t0=performance.now();
-    const q=(queryOverride||input.value||'').trim().toLowerCase();
-    if(!q){ currentResults=[]; renderPage(1); if(timeDiv) timeDiv.textContent='0ms'; return; }
-
-    const tokens=q.split(/\s+/).filter(Boolean);
-    const candidateSet=new Set();
-    tokens.forEach(tok=>{
-      if(invIndex.has(tok)) invIndex.get(tok).forEach(idx=>candidateSet.add(idx));
-      const barrel=barrels[tok[0]]||new Map();
-      for(const [key,setIdx] of barrel.entries()) if(key.startsWith(tok)) setIdx.forEach(idx=>candidateSet.add(idx));
+    const expansionSet = new Set();
+    queryTokens.forEach(t => {
+      if (CONCEPT_MAP[t]) {
+        CONCEPT_MAP[t].forEach(syn => expansionSet.add(syn));
+      }
     });
 
-    const scored=[];
-    candidateSet.forEach(idx=>{
-      const g=normalizedForward[idx];
-      let score=0;
-      tokens.forEach(tok=>{
-        if(g.nameLc===tok) score+=1000;
-        else if(g.nameLc.startsWith(tok)) score+=600;
-        else if(g.nameLc.includes(tok)) score+=350;
-        if(g.descLc.includes(tok)) score+=10;
+    const results = [];
+    
+    for (let i = 0; i < docs.length; i++) {
+      const doc = docs[i];
+      let score = 0;
+
+      // Exact Phrase
+      if (doc.nameLc.includes(query)) {
+        score += S_EXACT_PHRASE;
+        if (doc.nameLc.startsWith(query)) score += 500; 
+      } 
+      
+      // Token Match
+      queryTokens.forEach(qt => {
+        if (doc.nameLc.includes(qt)) score += S_TITLE_TOKEN;
+        else if (doc.descLc.includes(qt)) score += S_DESC_TOKEN;
       });
-      score += (g.recommendationsTotal||0)*0.0001;
-      score += (g.metacriticScore||0)*0.01;
-      scored.push({idx,score});
-    });
 
-    scored.sort((a,b)=>b.score-a.score);
-    currentResults=scored.map(s=>normalizedForward[s.idx]);
-    const t1=performance.now();
-    if(timeDiv) timeDiv.textContent=`Search time: ${(t1-t0).toFixed(1)}ms`;
+      // Concept Match
+      expansionSet.forEach(term => {
+        if (doc.nameLc.includes(term)) {
+           score += S_CONCEPT_TITLE;
+        } else if (doc.descLc.includes(term)) {
+           score += S_DESC_TOKEN;
+        }
+      });
+
+      // Semantic Fallback
+      if (queryVec && doc.vec) {
+        const sim = cosineSim(queryVec, doc.vec);
+        if (sim > 0.12) score += (sim * S_SEMANTIC);
+      }
+
+      // Fame Factor
+      if (score > 10) {
+        score += (doc.pop * POPULARITY_POWER * 100); 
+        results.push({ doc: doc, score: score });
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    currentResults = results.map(r => r.doc);
+
+    const t1 = performance.now();
+    if (timeDiv) timeDiv.textContent = `Found ${currentResults.length} results in ${(t1 - t0).toFixed(1)}ms`;
     renderPage(1);
   }
 
-  // --- Suggestions (dropdown with cover image + desc + FREE badge) ---
-  function showSuggestions(query){
-    const q=query.toLowerCase().trim();
-    if(!q){ suggestDiv.style.display='none'; return; }
 
-    const tokens=q.split(/\s+/).filter(Boolean);
-    const candidateSet=new Set();
-    tokens.forEach(tok=>{
-      const barrel=barrels[tok[0]]||new Map();
-      for(const [key,setIdx] of barrel.entries()) if(key.startsWith(tok)) setIdx.forEach(idx=>candidateSet.add(idx));
-    });
+  // ====== 3. RENDER (Unchanged Logic, Image Fix Applied) ======
+  function renderPage(page = 1) {
+    currentPage = page;
+    resultsDiv.innerHTML = '';
+    const start = (page - 1) * PAGE_SIZE; 
+    const end = Math.min(start + PAGE_SIZE, currentResults.length);
+    
+    if (currentResults.length === 0) { 
+      resultsDiv.innerHTML = '<p style="color:#98a6b3;text-align:center;padding:20px;">No results found</p>'; 
+      pagerDiv.innerHTML = ''; 
+      return; 
+    }
 
-    const suggestions=Array.from(candidateSet)
-      .map(idx=>normalizedForward[idx])
-      .sort((a,b)=> b.recommendationsTotal - a.recommendationsTotal)
-      .slice(0,10);
+    for (let i = start; i < end; i++) {
+      const g = currentResults[i];
+      const card = document.createElement('div');
+      card.style.cssText = 'display:flex;align-items:flex-start;gap:12px;margin:6px 0;padding:10px;background:#152d3a;border-radius:6px;cursor:pointer;transition:all 0.1s;';
+      card.onmouseenter = () => card.style.background = '#1a3a4a';
+      card.onmouseleave = () => card.style.background = '#152d3a';
+      if (g.raw.appid) card.onclick = () => window.open(`https://store.steampowered.com/app/${g.raw.appid}`, '_blank');
 
-    suggestDiv.innerHTML='';
-    if(suggestions.length===0){ suggestDiv.style.display='none'; return; }
+      // Image Handling
+      const img = document.createElement('img'); 
+      img.src = g.img || PLACEHOLDER; 
+      img.width = 120; img.height = 70;
+      img.style.cssText = 'object-fit:cover;border-radius:4px;flex-shrink:0;background:#12232d;';
+      
+      // If image fails to load, swap to placeholder
+      img.onerror = function(){ this.src = PLACEHOLDER; };
 
-    suggestions.forEach(g=>{
-      const div=document.createElement('div');
-      div.style.cssText='display:flex;gap:8px;padding:6px 8px;cursor:pointer;border-bottom:1px solid #223a50;align-items:center;transition:background 0.1s;';
-      div.addEventListener('mouseenter',()=>div.style.background='#1a3a4a');
-      div.addEventListener('mouseleave',()=>div.style.background='transparent');
-      div.addEventListener('click',()=>{ input.value=g.name; triggerSearch(); });
-
-      const img=document.createElement('img'); img.src=g.headerImage||PLACEHOLDER; img.width=40; img.height=25;
-      img.style.cssText='object-fit:cover;border-radius:3px;flex-shrink:0;background:#12232d;';
-      img.onerror=function(){ this.onerror=null; this.src=PLACEHOLDER; };
-
-      const info=document.createElement('div'); info.style.cssText='flex:1;min-width:0;';
-      const title=document.createElement('div'); title.textContent=g.name; title.style.cssText='color:#fff;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      const desc=document.createElement('div'); desc.textContent=g.desc.length>60?g.desc.slice(0,60)+'...':g.desc; desc.style.cssText='color:#98a6b3;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      const badge=document.createElement('span'); badge.textContent=g.isFree?'FREE':''; badge.style.cssText='background:#66c0f4;color:#07141d;padding:1px 4px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px;';
-
-      info.appendChild(title); info.appendChild(desc); title.appendChild(badge);
-      div.appendChild(img); div.appendChild(info);
-      suggestDiv.appendChild(div);
-    });
-    suggestDiv.style.top = input.offsetHeight + 4 + 'px'; // ensure directly under input
-    suggestDiv.style.display='block';
+      const info = document.createElement('div'); info.style.flex = '1';
+      info.innerHTML = `
+        <h4 style="margin:0 0 6px 0;color:#fff;font-size:15px;font-weight:600;">${g.name}</h4>
+        <div style="color:#98a6b3;font-size:13px;height:36px;overflow:hidden;line-height:1.4;">${g.desc ? g.desc.slice(0,100)+'...' : 'No description.'}</div>
+        <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:#66c0f4;">
+          ${g.meta > 0 ? `<span>Metacritic: ${g.meta}</span>` : ''}
+          ${g.rec > 0 ? `<span>Recs: ${g.rec.toLocaleString()}</span>` : ''}
+          ${g.isFree ? `<span style="background:#66c0f4;color:#07141d;padding:0 4px;border-radius:2px;font-weight:bold;">FREE</span>` : ''}
+        </div>
+      `;
+      card.appendChild(img); card.appendChild(info);
+      resultsDiv.appendChild(card);
+    }
+    
+    pagerDiv.innerHTML = '';
+    const totalPages = Math.ceil(currentResults.length / PAGE_SIZE);
+    if (totalPages > 1) {
+      const c = document.createElement('div'); c.style.cssText = 'display:flex;gap:4px;justify-content:center;margin-top:10px;';
+      const mkBtn = (txt, p) => {
+        const b = document.createElement('button'); b.textContent = txt;
+        b.style.cssText = `padding:4px 8px;background:${p===currentPage?'#66c0f4':'#152d3a'};color:${p===currentPage?'#07141d':'#ccc'};border:1px solid #444;cursor:pointer;border-radius:3px;`;
+        b.onclick = () => renderPage(p);
+        c.appendChild(b);
+      };
+      if (currentPage > 1) mkBtn('<', currentPage-1);
+      let s = Math.max(1, currentPage - 2), e = Math.min(totalPages, currentPage + 2);
+      for(let i=s; i<=e; i++) mkBtn(i, i);
+      if (currentPage < totalPages) mkBtn('>', currentPage+1);
+      pagerDiv.appendChild(c);
+    }
   }
 
-  input.addEventListener('input',()=>showSuggestions(input.value));
-  searchBtn.addEventListener('click',()=>triggerSearch());
-  input.addEventListener('keydown',e=>{ if(e.key==='Enter') triggerSearch(); });
+  function showSuggestions(q) {
+    const query = q.trim().toLowerCase();
+    if (!query) { suggestDiv.style.display = 'none'; return; }
 
+    let matches = docs.filter(d => d.nameLc.includes(query));
+    matches.sort((a,b) => b.pop - a.pop);
+    
+    const top = matches.slice(0, 8);
+    
+    suggestDiv.innerHTML = '';
+    if (top.length === 0) { suggestDiv.style.display = 'none'; return; }
+    
+    top.forEach(g => {
+      const r = document.createElement('div');
+      r.style.cssText = 'padding:8px;border-bottom:1px solid #223a50;cursor:pointer;color:#ccc;font-size:13px;display:flex;align-items:center;gap:8px;';
+      r.onmouseenter = () => { r.style.background = '#1a3a4a'; r.style.color = '#fff'; };
+      r.onmouseleave = () => { r.style.background = 'transparent'; r.style.color = '#ccc'; };
+      r.onclick = () => { input.value = g.name; triggerSearch(); };
+      r.innerHTML = `<img src="${g.img||PLACEHOLDER}" width="30" height="20" style="object-fit:cover;"> ${g.name}`;
+      suggestDiv.appendChild(r);
+    });
+    suggestDiv.style.display = 'block';
+    suggestDiv.style.top = input.offsetHeight + 'px';
+  }
+
+  input.addEventListener('input', () => showSuggestions(input.value));
+  input.addEventListener('keydown', (e) => { if(e.key==='Enter') triggerSearch(); });
+  searchBtn.addEventListener('click', () => triggerSearch());
 });
