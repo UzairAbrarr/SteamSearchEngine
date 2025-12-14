@@ -53,15 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const colMap = {};
     for (const col of required) {
       const idx = headers.indexOf(col);
-      if (idx === -1) {
-        throw new Error(`Missing required column "${col}" in ${fileName}`);
-      }
+      if (idx === -1) throw new Error(`Missing required column "${col}" in ${fileName}`);
       colMap[col] = idx;
     }
 
     let added = 0;
     const totalRows = lines.length - headerIndex - 1;
-
     for (let i = headerIndex + 1; i < lines.length; i += chunkSize) {
       const slice = lines.slice(i, Math.min(i + chunkSize, lines.length));
       for (const row of slice) {
@@ -116,9 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Keep existing data by default (append). If you want to reset on each upload, uncomment below.
-    // window.forwardIndex = []; window.invertedIndex = {}; window.lexicon = {}; appKeySet.clear();
-
     let totalFiles = files.length;
     let filesDone = 0;
     let totalAdded = 0;
@@ -131,11 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const trimmed = text.trim();
       try {
         let res;
-        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-          res = await processJSONText(text, f.name);
-        } else {
-          res = await processCSVText(text, f.name);
-        }
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) res = await processJSONText(text, f.name);
+        else res = await processCSVText(text, f.name);
         totalAdded += res.added || 0;
       } catch (procErr) {
         console.error('Processing error', f.name, procErr);
@@ -147,20 +138,54 @@ document.addEventListener('DOMContentLoaded', () => {
       await new Promise(r => setTimeout(r, 8));
     }
 
-    // Final UI and events
     uploadInfo.textContent = `✓ Done! ${filesDone}/${totalFiles} files processed, ${totalAdded} new records added.`;
-    // make sure nav switches to home visibly
     if (typeof window.setActivePage === 'function') window.setActivePage('home');
     else {
-      // fallback: toggle classes directly
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       const home = document.getElementById('page-home'); if(home) home.classList.add('active');
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       const btn = document.querySelector('.nav-btn[data-page="home"]'); if(btn) btn.classList.add('active');
     }
-    // notify other modules
     document.dispatchEvent(new Event('datasetUploaded'));
   }
+
+  // --- START: Auto-load predefined indexes from Drive ---
+  async function loadPredefinedIndexes() {
+    const urls = {
+      lexicon: 'https://drive.google.com/uc?export=download&id=18WorxEFHAF_wc1Pd-ea1dO4q-zZX2sr_',
+      forwardIndex: 'https://drive.google.com/uc?export=download&id=1t2ApDLX_6iX7aGxfNYnkc0PEPQKqP59t',
+      invertedIndex: 'https://drive.google.com/uc?export=download&id=1KRjWkeD9FVHpcdpmu9sz4jRNDGwAloW-'
+    };
+
+    try {
+      // load lexicon
+      const lexRes = await fetch(urls.lexicon);
+      const lexJson = await lexRes.json();
+      window.lexicon = lexJson;
+
+      // load inverted index
+      const invRes = await fetch(urls.invertedIndex);
+      const invJson = await invRes.json();
+      window.invertedIndex = invJson;
+
+      // load forward index
+      const fwdRes = await fetch(urls.forwardIndex);
+      const fwdJson = await fwdRes.json();
+      window.forwardIndex = fwdJson.map((doc, idx) => ({ ...doc, docId: idx }));
+      
+      // rebuild appKeySet
+      for (const g of window.forwardIndex) appKeySet.add((g.appid || g.name || '').toString().toLowerCase());
+
+      // trigger dataset uploaded event so home renders
+      document.dispatchEvent(new Event('datasetUploaded'));
+    } catch(e) {
+      console.error('Error loading predefined indexes', e);
+      uploadInfo.textContent = 'Failed to load predefined dataset.';
+    }
+  }
+
+  loadPredefinedIndexes();
+  // --- END: Auto-load predefined indexes ---
 
   fileInput.addEventListener('change', (e) => {
     const files = e.target.files;
@@ -181,4 +206,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
-
