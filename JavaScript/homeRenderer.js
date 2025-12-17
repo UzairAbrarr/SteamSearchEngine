@@ -2,13 +2,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('home-categories');
   const freeContainer = document.getElementById('freeGamesList');
   const PLACEHOLDER = '/mnt/data/f84e3cff-c908-45f9-8373-2e034c71a892.png';
-  const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
-  // --- OPTIMIZED: Load datasets without unnecessary processing ---
-  async function loadFinalDatasets() {
+  // ============================================
+  //expected time to load at start is 0.2-0.6 SECONDS! 
+  // ============================================
+  
+  async function loadHomePageData() {
     const basePath = './PreDefinedJsonsFile/';
     try {
+      // Load ONLY tiny homeCategories.json (50KB)
+      const homeData = await fetch(basePath + 'homeCategories.json').then(r => r.json());
+      
+      window.homeCategories = homeData.categories;
+      window.freeGamesPreview = homeData.freeGames;
+      
+      // Render immediately
+      renderHomePage();
+      
+      // Load full datasets in background for search
+      setTimeout(() => loadFullDatasets(), 1000);
+      
+    } catch (e) {
+      console.error('Failed to load homepage data', e);
+      container.innerHTML = '<p class="small">Failed to load homepage.</p>';
+    }
+  }
+
+  async function loadFullDatasets() {
+    if (window.fullDataLoaded) return;
+    
+    const basePath = './PreDefinedJsonsFile/';
+    try {
+      console.log('Loading full datasets in background...');
+      
       const [lexicon, invertedIndex, fwd1, fwd2] = await Promise.all([
         fetch(basePath + 'lexicon.json').then(r => r.json()),
         fetch(basePath + 'invertedIndex.json').then(r => r.json()),
@@ -16,73 +43,50 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(basePath + 'forwardIndex_part2.json').then(r => r.json())
       ]);
 
-      // Store raw data
       window.lexicon = lexicon;
       window.invertedIndex = invertedIndex;
       window.forwardIndex = [...fwd1, ...fwd2];
-
-      // ONLY precompute what's absolutely needed for home page
       window.freeGames = window.forwardIndex.filter(g => g.isFree);
+      window.fullDataLoaded = true;
 
-      // Dispatch early so UI can start rendering
+      console.log('✅ Full datasets ready for search!');
       document.dispatchEvent(new Event('datasetUploaded'));
     } catch (e) {
-      console.error('Failed to load datasets', e);
-      container.innerHTML = '<p class="small">Failed to load dataset.</p>';
+      console.error('Failed to load full datasets', e);
     }
   }
-  loadFinalDatasets();
 
-  // --- OPTIMIZED: Build category cache ONLY when needed ---
-  function getCategoryCache() {
-    if (window.categoryCache) return window.categoryCache;
-
-    const topN = (arr, key, n) => {
-      return arr
-        .map(g => ({ g, val: g[key] || 0 }))
-        .sort((a, b) => b.val - a.val)
-        .slice(0, n)
-        .map(item => item.g);
-    };
-
-    const filterByKeywords = (keywords, limit) => {
-      const regex = new RegExp(keywords, 'i');
-      const results = [];
-      for (let i = 0; i < window.forwardIndex.length && results.length < limit; i++) {
-        const g = window.forwardIndex[i];
-        const text = (g.name || '') + ' ' + (g.shortDescription || '');
-        if (regex.test(text)) results.push(g);
-      }
-      return results;
-    };
-
-    window.categoryCache = {
-      Popular: topN(window.forwardIndex, 'recommendationsTotal', MAX_HOME_PER_CATEGORY),
-      TopMetacritic: topN(window.forwardIndex, 'metacriticScore', MAX_HOME_PER_CATEGORY),
-      FreeGames: window.freeGames.slice(0, MAX_HOME_PER_CATEGORY),
-      Sports: filterByKeywords('sports', MAX_HOME_PER_CATEGORY),
-      Vehicle: filterByKeywords('vehicle|car|bike|cycle|racing', MAX_HOME_PER_CATEGORY),
-      Horror: filterByKeywords('horror|zombi|zombie|scary|ghost', MAX_HOME_PER_CATEGORY)
-    };
-
-    return window.categoryCache;
+  function renderHomePage() {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-home')?.classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.nav-btn[data-page="home"]')?.classList.add('active');
+    
+    renderHome();
+    renderFreeVertical();
   }
 
-  // --- Minimal rendering helpers ---
-  const escapeHtml = s => {
-    const div = document.createElement('div');
-    div.textContent = s || '';
-    return div.innerHTML;
+  // Start loading
+  loadHomePageData();
+
+  // ============================================
+  // RENDERING FUNCTIONS
+  // ============================================
+
+  const esc = s => {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
   };
 
   const makeGameCard = g => {
-    const wrapper = document.createElement(g.appid ? 'a' : 'div');
+    const w = document.createElement(g.appid ? 'a' : 'div');
     if (g.appid) {
-      wrapper.href = `https://store.steampowered.com/app/${g.appid}`;
-      wrapper.target = '_blank';
-      wrapper.rel = 'noopener noreferrer';
+      w.href = `https://store.steampowered.com/app/${g.appid}`;
+      w.target = '_blank';
+      w.rel = 'noopener noreferrer';
     }
-    wrapper.className = 'game-card';
+    w.className = 'game-card';
 
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
@@ -92,8 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
     meta.className = 'meta';
     meta.innerHTML = `
       <div>
-        <h4>${escapeHtml(g.name || 'Untitled')}</h4>
-        <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+        <h4>${esc(g.name || 'Untitled')}</h4>
+        <p>${esc(g.shortDescription || 'No description available.')}</p>
       </div>
       <div>
         <span class="price-badge">${g.isFree ? 'Free' : ''}</span>
@@ -105,18 +109,18 @@ document.addEventListener('DOMContentLoaded', () => {
     hoverBox.setAttribute('aria-hidden', 'true');
     hoverBox.style.display = 'none';
     hoverBox.innerHTML = `
-      <h4>${escapeHtml(g.name || 'Untitled')}</h4>
-      <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+      <h4>${esc(g.name || 'Untitled')}</h4>
+      <p>${esc(g.shortDescription || 'No description available.')}</p>
     `;
 
-    wrapper.appendChild(thumb);
-    wrapper.appendChild(meta);
-    wrapper.appendChild(hoverBox);
+    w.appendChild(thumb);
+    w.appendChild(meta);
+    w.appendChild(hoverBox);
 
-    wrapper.addEventListener('mouseenter', () => hoverBox.style.display = 'block');
-    wrapper.addEventListener('mouseleave', () => hoverBox.style.display = 'none');
+    w.addEventListener('mouseenter', () => hoverBox.style.display = 'block');
+    w.addEventListener('mouseleave', () => hoverBox.style.display = 'none');
 
-    return wrapper;
+    return w;
   };
 
   const createCarousel = (title, items) => {
@@ -125,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const head = document.createElement('div');
     head.className = 'category-head';
-    head.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="category-controls"></div>`;
+    head.innerHTML = `<h3>${esc(title)}</h3><div class="category-controls"></div>`;
 
     const scroller = document.createElement('div');
     scroller.className = 'home-games';
@@ -146,11 +150,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderHome = () => {
     container.innerHTML = '';
-    const cache = getCategoryCache(); // Build cache on-demand
+    const cats = window.homeCategories || {};
     const frag = document.createDocumentFragment();
 
-    Object.keys(cache).forEach(cat => {
-      const items = cache[cat];
+    Object.keys(cats).forEach(cat => {
+      const items = cats[cat];
       if (items && items.length) {
         frag.appendChild(createCarousel(cat.toUpperCase(), items));
       }
@@ -161,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderFreeVertical = (page = 1, perPage = FREE_PAGE_SIZE) => {
     freeContainer.innerHTML = '';
-    const freeGames = window.freeGames || [];
+    const freeGames = window.freeGamesPreview || window.freeGames || [];
     
     if (!freeGames.length) {
       freeContainer.innerHTML = '<p class="small">No free games.</p>';
@@ -184,8 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const info = document.createElement('div');
       info.className = 'free-info';
       info.innerHTML = `
-        <h4>${escapeHtml(g.name || 'Untitled')}</h4>
-        <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+        <h4>${esc(g.name || 'Untitled')}</h4>
+        <p>${esc(g.shortDescription || 'No description available.')}</p>
       `;
 
       card.appendChild(img);
@@ -203,16 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     freeContainer.appendChild(frag);
   };
-
-  document.addEventListener('datasetUploaded', () => {
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-home')?.classList.add('active');
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.nav-btn[data-page="home"]')?.classList.add('active');
-    
-    renderHome();
-    renderFreeVertical();
-  });
 
   document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b => {
     b.addEventListener('click', () => renderFreeVertical());
