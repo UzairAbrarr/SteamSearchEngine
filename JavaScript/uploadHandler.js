@@ -1,23 +1,41 @@
 // uploadHandler.js
+
+//Without this, JS might run before HTML exists, only run once the document means web page loaded
 document.addEventListener('DOMContentLoaded', () => {
+
+  //get the html elements,const because we dont want to change them throughout the program
   const fileInput = document.getElementById('fileInput');
   const uploadBtn = document.getElementById('uploadDatasetBtn');
   const uploadInfo = document.getElementById('upload-info');
 
+  //defensive coding if already exist resue otherwise create it
+  //window work like global so that every file can access these things
   window.forwardIndex = window.forwardIndex || [];
   window.invertedIndex = window.invertedIndex || {};
   window.lexicon = window.lexicon || {};
+
+  //set -> unique values only
+  //we use set because o(1) lookup faster than array search
+  //avoid duplication so that we dont index same game twice
   const appKeySet = new Set(window.forwardIndex.map(g => (g.appid || g.name || '').toString().toLowerCase()));
 
+  //This is used to reduce noise and index siize
+  //tokens are normalized all are in lowercase
+  //cointain words that dont help in search just there for formality
   const STOP_WORDS = new Set([
     "a","an","the","and","or","but","is","of","in","to","for","with","on","at","by","from",
     "up","down","out","about","into","as","then","now","it","its","are","was","were","be",
     "been","that","this","must","can","will","i","my"
   ]);
 
+  //split the csv using comma splitter logic but ignores the commas inside the games title or other fields
   function simpleCSVSplit(line){ return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); }
+
+  //DIfferent csvs contain differ data such that we normalize it so we can search accordingly
   function parseHeaders(line){ return simpleCSVSplit(line.replace(/^\uFEFF/, '').trim()).map(h => h.toLowerCase().trim().replace(/['"]+/g,'')); }
-  function ensureInvertedSet(barrel, term){ 
+  
+  //old data might contain arrays but this ensure that all the data must map to the set
+  function ensureInvertedSet(barrel, term){
     if(!window.invertedIndex[barrel]) window.invertedIndex[barrel]={}; 
     const cur = window.invertedIndex[barrel][term]; 
     if(cur instanceof Set) return cur; 
@@ -30,23 +48,33 @@ document.addEventListener('DOMContentLoaded', () => {
     window.invertedIndex[barrel][term] = s; 
     return s; 
   }
+
+  //partitioning using first letter like a mini hash bucket type thing 
+  //Hash partitioning concept, dynamic barrels
   function barrelForTerm(term){ 
     if(!term || term.length===0) return '_'; 
     const c = term[0]; 
     return (c >= 'a' && c <= 'z') ? c : '_'; 
   }
 
+  //Indexing a document 
   function indexDocAndAdd(doc) {
+    //validation means a document must have identity
     const rawAppid = (doc.appid || '').toString().trim();
     const name = (doc.name || '').toString().trim();
     if (!rawAppid && !name) return false;
     const key = rawAppid || name.toLowerCase();
+
+    //avoid duplicaation in the data
     if (appKeySet.has(key)) return false;
+
+    //Assigning a doc id
     const docId = window.forwardIndex.length;
     doc.docId = docId;
     window.forwardIndex.push(doc);
     appKeySet.add(key);
 
+    //case normalizations, remove punctuations etc
     const combined = ((name || '') + ' ' + (doc.shortDescription || '')).toLowerCase().replace(/-/g,' ').replace(/[^\w\s]/g,' ');
     const words = combined.split(/\s+/).filter(w => w && !STOP_WORDS.has(w));
     for (const w of words) {
@@ -58,14 +86,25 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
+  //uses await non blocking ui as the requirement of the program that when uploading file ui should work normally
+  //use chunk size so that we can avoid freeze app (large files friendly)
   async function processCSVText(text, fileName, chunkSize = 2000) {
-    const lines = text.split(/\r?\n/);
+    const lines = text.split(/\r?\n/);//split new lines or empty lines
+
+    //some csv's start with empty lines such that we skip them 
     let headerIndex = 0;
     while (headerIndex < lines.length && lines[headerIndex].trim() === '') headerIndex++;
+
+    // if file is empty then stop
     if (headerIndex >= lines.length) return { added: 0, totalRows: 0 };
 
+    //parsing headers 
     const headers = parseHeaders(lines[headerIndex]);
+
+    //set of required coloumn that must be present in the dataset
     const required = ["appid","name","short_description","header_image","metacritic_score","recommendations_total","is_free"];
+    
+    //this code makes the dataset independent of order becasue many csv's may have differnet order
     const colMap = {};
     for (const col of required) {
       const idx = headers.indexOf(col);
@@ -73,14 +112,20 @@ document.addEventListener('DOMContentLoaded', () => {
       colMap[col] = idx;
     }
 
+    //this works as a counter that adding how mnay rows actually
     let added = 0;
     const totalRows = lines.length - headerIndex - 1;
+
+    //use chunk size to load at once
     for (let i = headerIndex + 1; i < lines.length; i += chunkSize) {
       const slice = lines.slice(i, Math.min(i + chunkSize, lines.length));
+     //there is a chance maybe last chunk is smaller 
       for (const row of slice) {
         if (!row || row.trim() === '') continue;
         const parts = simpleCSVSplit(row);
         if (!parts || parts.length === 0) continue;
+
+        //build document by avoind crashes normalizing the data and handle missing values
         const doc = {
           appid: (parts[colMap.appid] || '').trim().replace(/['"]+/g,''),
           name: (parts[colMap.name] || '').trim().replace(/['"]+/g,''),
@@ -88,16 +133,18 @@ document.addEventListener('DOMContentLoaded', () => {
           headerImage: (parts[colMap.header_image] || '').trim().replace(/['"]+/g,''),
           metacriticScore: parseInt((parts[colMap.metacritic_score] || '').trim(), 10) || 0,
           recommendationsTotal: parseInt((parts[colMap.recommendations_total] || '').trim(), 10) || 0,
-          isFree: ((parts[colMap.is_free] || '').trim().toLowerCase() === 'true')
+          isFree: ((parts[colMap.is_free] || '').trim().toLowerCase() === 'true') // because csv booleans are strings
         };
         if (indexDocAndAdd(doc)) added++;
       }
+      //ui update such that user immersion doesnot break when loading the file
       uploadInfo.textContent = `Processing ${fileName}: ${Math.min(i - headerIndex + slice.length, totalRows)}/${totalRows} rows`;
       await new Promise(r => setTimeout(r, 8));
     }
     return { added, totalRows };
   }
 
+  //same logic as csv files just one thing that headers are not there in json
   async function processJSONText(text, fileName, chunkSize = 2000) {
     let data;
     try { data = JSON.parse(text); } catch (e) { throw new Error(`Invalid JSON in ${fileName}`); }
@@ -123,7 +170,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return { added, totalRows: data.length };
   }
 
+  /*Validate files
+    Loop files
+    Read text
+    Detect CSV or JSON
+    Call correct processor
+    Track totals
+    Update UI
+    Fire custom event*/
   async function processFiles(files) {
+
+    //trim as json files start { or [
     if (!files || files.length === 0) {
       uploadInfo.textContent = 'No file selected';
       return;

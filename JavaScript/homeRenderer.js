@@ -5,110 +5,216 @@ document.addEventListener('DOMContentLoaded', () => {
   const MAX_HOME_PER_CATEGORY = 12;
   const FREE_PAGE_SIZE = 10;
 
-  // --- Load final datasets quickly ---
+  // --- OPTIMIZED: Load datasets without unnecessary processing ---
   async function loadFinalDatasets() {
     const basePath = './PreDefinedJsonsFile/';
     try {
       const [lexicon, invertedIndex, fwd1, fwd2] = await Promise.all([
-        fetch(basePath+'lexicon.json').then(r=>r.json()),
-        fetch(basePath+'invertedIndex.json').then(r=>r.json()),
-        fetch(basePath+'forwardIndex_part1.json').then(r=>r.json()),
-        fetch(basePath+'forwardIndex_part2.json').then(r=>r.json())
+        fetch(basePath + 'lexicon.json').then(r => r.json()),
+        fetch(basePath + 'invertedIndex.json').then(r => r.json()),
+        fetch(basePath + 'forwardIndex_part1.json').then(r => r.json()),
+        fetch(basePath + 'forwardIndex_part2.json').then(r => r.json())
       ]);
 
+      // Store raw data
       window.lexicon = lexicon;
       window.invertedIndex = invertedIndex;
       window.forwardIndex = [...fwd1, ...fwd2];
 
-      // Precompute structures
-      window.appKeySet = new Set(window.forwardIndex.map(g=>(g.appid||g.name||'').toLowerCase()));
-      window.freeGames = window.forwardIndex.filter(g=>g.isFree);
-      
-      // Precompute top-N for categories
-      const topN = (arr,key,N)=>arr.slice().sort((a,b)=>b[key]-a[key]).slice(0,N);
-      window.categoryCache = {
-        Popular: topN(window.forwardIndex,'recommendationsTotal',MAX_HOME_PER_CATEGORY),
-        TopMetacritic: topN(window.forwardIndex,'metacriticScore',MAX_HOME_PER_CATEGORY),
-        FreeGames: window.freeGames.slice(0,MAX_HOME_PER_CATEGORY),
-        Sports: window.forwardIndex.filter(g=>/sports/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY),
-        Vehicle: window.forwardIndex.filter(g=>/vehicle|car|bike|cycle|racing/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY),
-        Horror: window.forwardIndex.filter(g=>/horror|zombi|zombie|scary|ghost/i.test((g.name||'')+' '+(g.shortDescription||''))).slice(0,MAX_HOME_PER_CATEGORY)
-      };
+      // ONLY precompute what's absolutely needed for home page
+      window.freeGames = window.forwardIndex.filter(g => g.isFree);
 
+      // Dispatch early so UI can start rendering
       document.dispatchEvent(new Event('datasetUploaded'));
-    } catch(e) {
+    } catch (e) {
       console.error('Failed to load datasets', e);
       container.innerHTML = '<p class="small">Failed to load dataset.</p>';
     }
   }
   loadFinalDatasets();
 
-  // --- Minimal rendering helpers ---
-  const escapeHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // --- OPTIMIZED: Build category cache ONLY when needed ---
+  function getCategoryCache() {
+    if (window.categoryCache) return window.categoryCache;
 
-  const makeGameCard = g=>{
-    const wrapper = document.createElement(g.appid?'a':'div');
-    if(g.appid){ wrapper.href=`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`; wrapper.target='_blank'; wrapper.rel='noopener noreferrer'; }
-    wrapper.className='game-card';
-    wrapper.innerHTML=`
-      <div class="thumb" style="background-image:url('${escapeHtml(g.headerImage||PLACEHOLDER)}')"></div>
-      <div class="meta"><div><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>
-      <div><span class="price-badge">${g.isFree?'Free':''}</span></div></div>
-      <div class="hover-box" aria-hidden="true"><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>
+    const topN = (arr, key, n) => {
+      return arr
+        .map(g => ({ g, val: g[key] || 0 }))
+        .sort((a, b) => b.val - a.val)
+        .slice(0, n)
+        .map(item => item.g);
+    };
+
+    const filterByKeywords = (keywords, limit) => {
+      const regex = new RegExp(keywords, 'i');
+      const results = [];
+      for (let i = 0; i < window.forwardIndex.length && results.length < limit; i++) {
+        const g = window.forwardIndex[i];
+        const text = (g.name || '') + ' ' + (g.shortDescription || '');
+        if (regex.test(text)) results.push(g);
+      }
+      return results;
+    };
+
+    window.categoryCache = {
+      Popular: topN(window.forwardIndex, 'recommendationsTotal', MAX_HOME_PER_CATEGORY),
+      TopMetacritic: topN(window.forwardIndex, 'metacriticScore', MAX_HOME_PER_CATEGORY),
+      FreeGames: window.freeGames.slice(0, MAX_HOME_PER_CATEGORY),
+      Sports: filterByKeywords('sports', MAX_HOME_PER_CATEGORY),
+      Vehicle: filterByKeywords('vehicle|car|bike|cycle|racing', MAX_HOME_PER_CATEGORY),
+      Horror: filterByKeywords('horror|zombi|zombie|scary|ghost', MAX_HOME_PER_CATEGORY)
+    };
+
+    return window.categoryCache;
+  }
+
+  // --- Minimal rendering helpers ---
+  const escapeHtml = s => {
+    const div = document.createElement('div');
+    div.textContent = s || '';
+    return div.innerHTML;
+  };
+
+  const makeGameCard = g => {
+    const wrapper = document.createElement(g.appid ? 'a' : 'div');
+    if (g.appid) {
+      wrapper.href = `https://store.steampowered.com/app/${g.appid}`;
+      wrapper.target = '_blank';
+      wrapper.rel = 'noopener noreferrer';
+    }
+    wrapper.className = 'game-card';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.style.backgroundImage = `url('${g.headerImage || PLACEHOLDER}')`;
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `
+      <div>
+        <h4>${escapeHtml(g.name || 'Untitled')}</h4>
+        <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+      </div>
+      <div>
+        <span class="price-badge">${g.isFree ? 'Free' : ''}</span>
+      </div>
     `;
-    wrapper.addEventListener('mouseenter',()=>{ const hb=wrapper.querySelector('.hover-box'); if(hb) hb.style.display='block'; });
-    wrapper.addEventListener('mouseleave',()=>{ const hb=wrapper.querySelector('.hover-box'); if(hb) hb.style.display='none'; });
+
+    const hoverBox = document.createElement('div');
+    hoverBox.className = 'hover-box';
+    hoverBox.setAttribute('aria-hidden', 'true');
+    hoverBox.style.display = 'none';
+    hoverBox.innerHTML = `
+      <h4>${escapeHtml(g.name || 'Untitled')}</h4>
+      <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+    `;
+
+    wrapper.appendChild(thumb);
+    wrapper.appendChild(meta);
+    wrapper.appendChild(hoverBox);
+
+    wrapper.addEventListener('mouseenter', () => hoverBox.style.display = 'block');
+    wrapper.addEventListener('mouseleave', () => hoverBox.style.display = 'none');
+
     return wrapper;
   };
 
-  const createCarousel = (title, items)=>{
+  const createCarousel = (title, items) => {
     const section = document.createElement('div');
-    section.className='home-category';
-    section.innerHTML=`<div class="category-head"><h3>${escapeHtml(title)}</h3><div class="category-controls"></div></div>`;
-    const scroller=document.createElement('div'); scroller.className='home-games';
-    const frag=document.createDocumentFragment();
-    items.forEach(i=>frag.appendChild(makeGameCard(i)));
+    section.className = 'home-category';
+
+    const head = document.createElement('div');
+    head.className = 'category-head';
+    head.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="category-controls"></div>`;
+
+    const scroller = document.createElement('div');
+    scroller.className = 'home-games';
+
+    const frag = document.createDocumentFragment();
+    items.forEach(i => frag.appendChild(makeGameCard(i)));
     scroller.appendChild(frag);
-    const dots=document.createElement('div'); dots.className='carousel-dots';
-    section.appendChild(scroller); section.appendChild(dots);
+
+    const dots = document.createElement('div');
+    dots.className = 'carousel-dots';
+
+    section.appendChild(head);
+    section.appendChild(scroller);
+    section.appendChild(dots);
+
     return section;
   };
 
-  const renderHome = ()=>{
-    container.innerHTML='';
-    const cache = window.categoryCache||{};
-    Object.keys(cache).forEach(cat=>{
-      const items=cache[cat];
-      if(items && items.length) container.appendChild(createCarousel(cat.toUpperCase(), items));
+  const renderHome = () => {
+    container.innerHTML = '';
+    const cache = getCategoryCache(); // Build cache on-demand
+    const frag = document.createDocumentFragment();
+
+    Object.keys(cache).forEach(cat => {
+      const items = cache[cat];
+      if (items && items.length) {
+        frag.appendChild(createCarousel(cat.toUpperCase(), items));
+      }
     });
+
+    container.appendChild(frag);
   };
 
-  const renderFreeVertical = (page=1, perPage=FREE_PAGE_SIZE)=>{
-    freeContainer.innerHTML='';
-    const freeGames = window.freeGames||[];
-    if(!freeGames.length){ freeContainer.innerHTML='<p class="small">No free games.</p>'; return; }
-    const start=(page-1)*perPage; const end=start+perPage;
-    const frag=document.createDocumentFragment();
-    freeGames.slice(start,end).forEach(g=>{
-      const card=document.createElement('div'); card.className='free-game-card';
-      card.innerHTML=`<img src="${escapeHtml(g.headerImage||PLACEHOLDER)}" alt="${escapeHtml(g.name||'Untitled')}" onerror="this.src='${PLACEHOLDER}'" /><div class="free-info"><h4>${escapeHtml(g.name||'Untitled')}</h4><p>${escapeHtml(g.shortDescription||'No description available.')}</p></div>`;
-      card.addEventListener('click',()=>{ if(g.appid) window.open(`https://store.steampowered.com/app/${encodeURIComponent(g.appid)}`,'_blank'); });
+  const renderFreeVertical = (page = 1, perPage = FREE_PAGE_SIZE) => {
+    freeContainer.innerHTML = '';
+    const freeGames = window.freeGames || [];
+    
+    if (!freeGames.length) {
+      freeContainer.innerHTML = '<p class="small">No free games.</p>';
+      return;
+    }
+
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
+    const frag = document.createDocumentFragment();
+
+    freeGames.slice(start, end).forEach(g => {
+      const card = document.createElement('div');
+      card.className = 'free-game-card';
+
+      const img = document.createElement('img');
+      img.src = g.headerImage || PLACEHOLDER;
+      img.alt = g.name || 'Untitled';
+      img.onerror = () => img.src = PLACEHOLDER;
+
+      const info = document.createElement('div');
+      info.className = 'free-info';
+      info.innerHTML = `
+        <h4>${escapeHtml(g.name || 'Untitled')}</h4>
+        <p>${escapeHtml(g.shortDescription || 'No description available.')}</p>
+      `;
+
+      card.appendChild(img);
+      card.appendChild(info);
+
+      if (g.appid) {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => {
+          window.open(`https://store.steampowered.com/app/${g.appid}`, '_blank');
+        });
+      }
+
       frag.appendChild(card);
     });
+
     freeContainer.appendChild(frag);
-    // pager can stay if needed, simplified
   };
 
-  document.addEventListener('datasetUploaded',()=>{
-    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.addEventListener('datasetUploaded', () => {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-home')?.classList.add('active');
-    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('.nav-btn[data-page="home"]')?.classList.add('active');
+    
     renderHome();
     renderFreeVertical();
   });
 
-  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b=>{
-    b.addEventListener('click',()=>renderFreeVertical());
+  document.querySelectorAll('.nav-btn[data-page="freegames"]').forEach(b => {
+    b.addEventListener('click', () => renderFreeVertical());
   });
 });
